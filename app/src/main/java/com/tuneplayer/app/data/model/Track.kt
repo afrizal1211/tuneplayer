@@ -10,4 +10,6 @@ data class Track(
     val mediaUri: String? = null,
     val videoId: String? = null,
     val isLocal: Boolean = false,
+    /** Cached stream URI for remote tracks; null until resolved. */
+    val resolvedUri: String? = null,
 )

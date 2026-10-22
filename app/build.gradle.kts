@@ -20,22 +20,27 @@ android {
     }
 
     signingConfigs {
-        create("release") {
-            val storeFile = project.findProperty("storeFile") as String? ?: "../keystore/release.keystore"
-            val storePassword = project.findProperty("storePassword") as String? ?: "tuneplayer123"
-            val keyAlias = project.findProperty("keyAlias") as String? ?: "tuneplayer"
-            val keyPassword = project.findProperty("keyPassword") as String? ?: "tuneplayer123"
-            this.storeFile = file(storeFile)
-            this.storePassword = storePassword
-            this.keyAlias = keyAlias
-            this.keyPassword = keyPassword
+        // Release signing is opt-in: CI has no keystore, so the release variant
+        // stays unsigned there. Pass -PstoreFile=/path -PstorePassword=... to
+        // produce a signed release locally.
+        val storeFile = (project.findProperty("storeFile") as String?)
+            ?.takeIf { it.isNotBlank() }
+            ?.let(::file)
+            ?.takeIf { it.exists() }
+        if (storeFile != null) {
+            create("release") {
+                this.storeFile = storeFile
+                storePassword = project.findProperty("storePassword") as String? ?: "tuneplayer123"
+                keyAlias = project.findProperty("keyAlias") as String? ?: "tuneplayer"
+                keyPassword = project.findProperty("keyPassword") as String? ?: "tuneplayer123"
+            }
         }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("release")
+            signingConfig = signingConfigs.findByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",

@@ -6,4 +6,6 @@
     <string name="shortcut_search_long">Search YouTube Music</string>
     <string name="shortcut_queue_short">Queue</string>
     <string name="shortcut_queue_long">Open play queue</string>
+    <string name="shortcut_liked_short">Liked</string>
+    <string name="shortcut_liked_long">Open liked songs</string>
 </resources>

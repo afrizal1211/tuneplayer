@@ -30,4 +30,19 @@
                 android:value="queue" />
         </intent>
     </shortcut>
+    <shortcut
+        android:shortcutId="liked"
+        android:enabled="true"
+        android:icon="@drawable/ic_launcher"
+        android:shortcutLongLabel="@string/shortcut_liked_long"
+        android:shortcutShortLabel="@string/shortcut_liked_short">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetClass="com.tuneplayer.app.MainActivity"
+            android:targetPackage="com.tuneplayer.app">
+            <extra
+                android:name="com.tuneplayer.app.extra.OPEN_TAB"
+                android:value="liked" />
+        </intent>
+    </shortcut>
 </shortcuts>

@@ -22,10 +22,19 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.PlaylistAdd
+import androidx.compose.material.icons.filled.Repeat
+import androidx.compose.material.icons.filled.RepeatOne
+import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.MusicNote
@@ -79,7 +88,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.media3.common.Player
 import coil3.compose.AsyncImage
+import com.tuneplayer.app.data.lyrics.LrcParser
 import com.tuneplayer.app.data.model.Track
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -144,6 +155,12 @@ fun TunePlayerScreen(
                             },
                         )
                     }
+                    IconButton(onClick = viewModel::cyclePlaybackSpeed) {
+                        Text(
+                            text = "%.2gx".format(state.playbackSpeed),
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                    }
                 },
             )
         },
@@ -182,6 +199,12 @@ fun TunePlayerScreen(
                     NavigationBarItem(
                         selected = selectedTab == 3,
                         onClick = { selectedTab = 3 },
+                        icon = { Icon(Icons.Default.Favorite, contentDescription = null) },
+                        label = { Text("Liked") },
+                    )
+                    NavigationBarItem(
+                        selected = selectedTab == 4,
+                        onClick = { selectedTab = 4 },
                         icon = { Icon(Icons.Default.Settings, contentDescription = null) },
                         label = { Text("Settings") },
                     )
@@ -206,22 +229,26 @@ fun TunePlayerScreen(
             when (selectedTab) {
                 0 -> LibraryScreen(
                     tracks = state.localTracks,
+                    favoriteIds = state.favoriteIds,
                     isLoading = state.isLoadingLocal,
                     hasPermission = hasAudioPermission,
                     onRequestPermission = { permissionLauncher.launch(permission) },
                     onPlay = viewModel::play,
                     onPlayNext = viewModel::playNext,
+                    onToggleFavorite = viewModel::toggleFavorite,
                     onShare = { track -> shareTrack(context, track) },
                 )
 
                 1 -> YouTubeScreen(
                     query = state.query,
                     results = state.searchResults,
+                    favoriteIds = state.favoriteIds,
                     isSearching = state.isSearching,
                     onQueryChange = viewModel::updateQuery,
                     onSearch = viewModel::search,
                     onPlay = viewModel::play,
                     onPlayNext = viewModel::playNext,
+                    onToggleFavorite = viewModel::toggleFavorite,
                     onShare = { track -> shareTrack(context, track) },
                 )
 
@@ -230,10 +257,21 @@ fun TunePlayerScreen(
                     currentIndex = state.queueIndex,
                     onPlay = { index -> viewModel.playFromQueue(state.playbackQueue, index) },
                     onRemove = viewModel::removeFromQueue,
+                    onMove = viewModel::moveInQueue,
                     onClear = viewModel::clearQueue,
                 )
 
-                3 -> SettingsScreen(
+                3 -> FavoritesScreen(
+                    tracks = state.localTracks.filter { it.id in state.favoriteIds } +
+                        state.searchResults.filter { it.id in state.favoriteIds },
+                    favoriteIds = state.favoriteIds,
+                    onPlay = viewModel::play,
+                    onPlayNext = viewModel::playNext,
+                    onToggleFavorite = viewModel::toggleFavorite,
+                    onShare = { track -> shareTrack(context, track) },
+                )
+
+                4 -> SettingsScreen(
                     theme = state.theme,
                     equalizerEnabled = state.equalizerEnabled,
                     bassBoostLevel = state.bassBoostLevel,
@@ -249,7 +287,15 @@ fun TunePlayerScreen(
                 lyrics = state.lyrics,
                 isLoading = state.isLoadingLyrics,
                 isPlaying = state.isPlaying,
+                isShuffleEnabled = state.isShuffleEnabled,
+                repeatMode = state.repeatMode,
+                isFavorite = state.currentTrack?.let { it.id in state.favoriteIds } == true,
+                syncedLyrics = state.syncedLyrics,
+                activeLyricIndex = state.activeLyricIndex,
                 onTogglePlayPause = viewModel::togglePlayPause,
+                onToggleShuffle = viewModel::toggleShuffle,
+                onCycleRepeat = viewModel::cycleRepeatMode,
+                onToggleFavorite = viewModel::toggleFavorite,
                 onShare = { track -> shareTrack(context, track) },
                 onDismiss = { showLyricsSheet = false },
             )
@@ -275,11 +321,13 @@ fun TunePlayerScreen(
 @Composable
 private fun LibraryScreen(
     tracks: List<Track>,
+    favoriteIds: Set<String>,
     isLoading: Boolean,
     hasPermission: Boolean,
     onRequestPermission: () -> Unit,
     onPlay: (Track) -> Unit,
     onPlayNext: (Track) -> Unit,
+    onToggleFavorite: (Track) -> Unit,
     onShare: (Track) -> Unit,
 ) {
     if (!hasPermission) {
@@ -312,18 +360,66 @@ private fun LibraryScreen(
         return
     }
 
-    TrackList(tracks = tracks, onPlay = onPlay, onPlayNext = onPlayNext, onShare = onShare)
+    TrackList(
+        tracks = tracks,
+        favoriteIds = favoriteIds,
+        onPlay = onPlay,
+        onPlayNext = onPlayNext,
+        onToggleFavorite = onToggleFavorite,
+        onShare = onShare,
+    )
+}
+
+@Composable
+private fun FavoritesScreen(
+    tracks: List<Track>,
+    favoriteIds: Set<String>,
+    onPlay: (Track) -> Unit,
+    onPlayNext: (Track) -> Unit,
+    onToggleFavorite: (Track) -> Unit,
+    onShare: (Track) -> Unit,
+) {
+    if (tracks.isEmpty()) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Icon(
+                    Icons.Default.FavoriteBorder,
+                    contentDescription = null,
+                    modifier = Modifier.size(48.dp),
+                )
+                Spacer(Modifier.height(16.dp))
+                Text("No liked songs yet", style = MaterialTheme.typography.bodyLarge)
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "Tap the heart on any song to save it here",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        return
+    }
+    TrackList(
+        tracks = tracks,
+        favoriteIds = favoriteIds,
+        onPlay = onPlay,
+        onPlayNext = onPlayNext,
+        onToggleFavorite = onToggleFavorite,
+        onShare = onShare,
+    )
 }
 
 @Composable
 private fun YouTubeScreen(
     query: String,
     results: List<Track>,
+    favoriteIds: Set<String>,
     isSearching: Boolean,
     onQueryChange: (String) -> Unit,
     onSearch: () -> Unit,
     onPlay: (Track) -> Unit,
     onPlayNext: (Track) -> Unit,
+    onToggleFavorite: (Track) -> Unit,
     onShare: (Track) -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
@@ -355,8 +451,10 @@ private fun YouTubeScreen(
         } else {
             TrackList(
                 tracks = results,
+                favoriteIds = favoriteIds,
                 onPlay = onPlay,
                 onPlayNext = onPlayNext,
+                onToggleFavorite = onToggleFavorite,
                 onShare = onShare,
             )
         }
@@ -366,8 +464,10 @@ private fun YouTubeScreen(
 @Composable
 private fun TrackList(
     tracks: List<Track>,
+    favoriteIds: Set<String>,
     onPlay: (Track) -> Unit,
     onPlayNext: (Track) -> Unit,
+    onToggleFavorite: (Track) -> Unit,
     onShare: (Track) -> Unit,
 ) {
     LazyColumn(
@@ -377,8 +477,10 @@ private fun TrackList(
         items(items = tracks, key = { it.id }) { track ->
             TrackRow(
                 track = track,
+                isFavorite = track.id in favoriteIds,
                 onPlay = { onPlay(track) },
                 onPlayNext = { onPlayNext(track) },
+                onToggleFavorite = { onToggleFavorite(track) },
                 onShare = { onShare(track) },
             )
             HorizontalDivider(modifier = Modifier.padding(start = 72.dp))
@@ -389,8 +491,10 @@ private fun TrackList(
 @Composable
 private fun TrackRow(
     track: Track,
+    isFavorite: Boolean,
     onPlay: () -> Unit,
     onPlayNext: () -> Unit,
+    onToggleFavorite: () -> Unit,
     onShare: () -> Unit,
 ) {
     Row(
@@ -421,6 +525,17 @@ private fun TrackRow(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
+            )
+        }
+        IconButton(onClick = onToggleFavorite) {
+            Icon(
+                imageVector = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                contentDescription = if (isFavorite) "Remove from favorites" else "Add to favorites",
+                tint = if (isFavorite) {
+                    MaterialTheme.colorScheme.error
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
             )
         }
         IconButton(onClick = onPlayNext) {
@@ -570,6 +685,7 @@ private fun QueueScreen(
     currentIndex: Int,
     onPlay: (Int) -> Unit,
     onRemove: (Int) -> Unit,
+    onMove: (Int, Int) -> Unit,
     onClear: () -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
@@ -614,6 +730,8 @@ private fun QueueScreen(
                             isPlaying = index == currentIndex,
                             onPlay = { onPlay(index) },
                             onRemove = { onRemove(index) },
+                            onMoveUp = { if (index > 0) onMove(index, index - 1) },
+                            onMoveDown = { if (index < queue.lastIndex) onMove(index, index + 1) },
                         )
                         HorizontalDivider(modifier = Modifier.padding(start = 72.dp))
                     }
@@ -629,6 +747,8 @@ private fun QueueRow(
     isPlaying: Boolean,
     onPlay: () -> Unit,
     onRemove: () -> Unit,
+    onMoveUp: () -> Unit,
+    onMoveDown: () -> Unit,
 ) {
     Row(
         modifier = Modifier
@@ -671,6 +791,14 @@ private fun QueueRow(
             )
             Spacer(Modifier.width(12.dp))
         }
+        Column {
+            IconButton(onClick = onMoveUp) {
+                Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Move up")
+            }
+            IconButton(onClick = onMoveDown) {
+                Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Move down")
+            }
+        }
         IconButton(onClick = onRemove) {
             Icon(Icons.Default.Close, contentDescription = "Remove from queue")
         }
@@ -702,7 +830,15 @@ private fun LyricsSheet(
     lyrics: String?,
     isLoading: Boolean,
     isPlaying: Boolean,
+    isShuffleEnabled: Boolean,
+    repeatMode: Int,
+    isFavorite: Boolean,
+    syncedLyrics: List<LrcParser.LrcLine>,
+    activeLyricIndex: Int,
     onTogglePlayPause: () -> Unit,
+    onToggleShuffle: () -> Unit,
+    onCycleRepeat: () -> Unit,
+    onToggleFavorite: (Track) -> Unit,
     onShare: (Track) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -735,10 +871,35 @@ private fun LyricsSheet(
             )
             Spacer(Modifier.height(16.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onToggleShuffle) {
+                    Icon(
+                        imageVector = Icons.Default.Shuffle,
+                        contentDescription = "Shuffle",
+                        tint = if (isShuffleEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 IconButton(onClick = onTogglePlayPause) {
                     Icon(
                         imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                         contentDescription = if (isPlaying) "Pause" else "Play",
+                    )
+                }
+                IconButton(onClick = onCycleRepeat) {
+                    Icon(
+                        imageVector = when (repeatMode) {
+                            Player.REPEAT_MODE_ONE -> Icons.Default.RepeatOne
+                            Player.REPEAT_MODE_ALL -> Icons.Default.Repeat
+                            else -> Icons.Default.Repeat
+                        },
+                        contentDescription = "Repeat",
+                        tint = if (repeatMode != Player.REPEAT_MODE_OFF) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                IconButton(onClick = { onToggleFavorite(track) }) {
+                    Icon(
+                        imageVector = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                        contentDescription = "Favorite",
+                        tint = if (isFavorite) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 IconButton(onClick = { onShare(track) }) {
@@ -748,6 +909,10 @@ private fun LyricsSheet(
             Spacer(Modifier.height(16.dp))
             when {
                 isLoading -> CircularProgressIndicator()
+                syncedLyrics.isNotEmpty() -> SyncedLyrics(
+                    lines = syncedLyrics,
+                    activeIndex = activeLyricIndex,
+                )
                 lyrics != null -> Text(
                     text = lyrics,
                     style = MaterialTheme.typography.bodyMedium,
@@ -764,6 +929,42 @@ private fun LyricsSheet(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+        }
+    }
+}
+
+/** Highlights the line for the current playback position and keeps it in view. */
+@Composable
+private fun SyncedLyrics(
+    lines: List<LrcParser.LrcLine>,
+    activeIndex: Int,
+) {
+    val listState = rememberLazyListState()
+    LaunchedEffect(activeIndex) {
+        if (activeIndex in lines.indices) {
+            listState.animateScrollToItem(activeIndex)
+        }
+    }
+    LazyColumn(
+        state = listState,
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 160.dp, max = 360.dp),
+    ) {
+        itemsIndexed(lines) { index, line ->
+            Text(
+                text = line.text,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = if (index == activeIndex) FontWeight.Bold else FontWeight.Normal,
+                color = if (index == activeIndex) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp),
+            )
         }
     }
 }

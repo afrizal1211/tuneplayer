@@ -4,23 +4,26 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.runtime.mutableStateOf
 import com.tuneplayer.app.ui.ThemeController
 import com.tuneplayer.app.ui.TunePlayerScreen
 import com.tuneplayer.app.ui.theme.TunePlayerTheme
 
 class MainActivity : ComponentActivity() {
 
-    private var requestedTab: Int? = null
-
-    private fun initialTab(): Int = requestedTab ?: 0
+    private val initialTab = mutableStateOf(0)
 
     private fun rememberTab(intent: android.content.Intent?) {
-        requestedTab = when (intent?.getStringExtra(EXTRA_OPEN_TAB)) {
-            TAB_YOUTUBE -> 1
-            TAB_QUEUE -> 2
-            else -> null
-        }
+        initialTab.value = tabForIntent(intent)
     }
+
+    private fun tabForIntent(intent: android.content.Intent?): Int =
+        when (intent?.getStringExtra(EXTRA_OPEN_TAB)) {
+            TAB_YOUTUBE -> TAB_INDEX_YOUTUBE
+            TAB_QUEUE -> TAB_INDEX_QUEUE
+            TAB_LIKED -> TAB_INDEX_LIKED
+            else -> TAB_INDEX_LIBRARY
+        }
 
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
@@ -34,14 +37,22 @@ class MainActivity : ComponentActivity() {
         ThemeController.set((application as TunePlayerApp).settingsStore.theme)
         setContent {
             TunePlayerTheme {
-                TunePlayerScreen(initialTab = initialTab())
+                val tab by initialTab
+                TunePlayerScreen(initialTab = tab)
             }
         }
     }
 
-    private companion object {
+    companion object {
         const val EXTRA_OPEN_TAB = "com.tuneplayer.app.extra.OPEN_TAB"
         const val TAB_YOUTUBE = "youtube"
         const val TAB_QUEUE = "queue"
+        const val TAB_LIKED = "liked"
+        const val TAB_LIBRARY = "library"
+
+        const val TAB_INDEX_LIBRARY = 0
+        const val TAB_INDEX_YOUTUBE = 1
+        const val TAB_INDEX_QUEUE = 2
+        const val TAB_INDEX_LIKED = 3
     }
 }
