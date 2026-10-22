@@ -30,10 +30,11 @@ jobs:
           distribution: "temurin"
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install SDK packages
-        run: sdkmanager "platforms;android-37.2" "build-tools;37.0.0"
+        uses: android-actions/setup-android@v4
+        with:
+          api-level: 37
+          build-tools-version: 37.0.0
+          cmdline-tools-version: latest
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -68,10 +69,11 @@ jobs:
           distribution: "temurin"
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install SDK packages
-        run: sdkmanager "platforms;android-37.2" "build-tools;37.0.0"
+        uses: android-actions/setup-android@v4
+        with:
+          api-level: 37
+          build-tools-version: 37.0.0
+          cmdline-tools-version: latest
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
