@@ -1,0 +1,3 @@
+-keepattributes *Annotation*, InnerClasses
+-dontwarn org.slf4j.**
+-dontwarn kotlinx.serialization.**
