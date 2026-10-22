@@ -23,6 +23,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.decodeFromJsonElement
 
 data class ResolvedAudio(
@@ -32,6 +33,11 @@ data class ResolvedAudio(
 )
 
 class YouTubeMusicRepository {
+
+    companion object {
+        @Suppress("UNUSED_PARAMETER")
+        val RESOLVED_HEADERS = java.util.concurrent.ConcurrentHashMap<String, Map<String, String>>()
+    }
 
     private val json = Json {
         ignoreUnknownKeys = true
@@ -75,8 +81,8 @@ class YouTubeMusicRepository {
     suspend fun search(query: String): List<Track> {
         val response = innerTube.search(YouTubeClient.WEB_REMIX, query = query).body<SearchResponse>()
         val renderers = mutableListOf<JsonObject>()
-        response.contents?.tabbedSearchResultsRenderer?.let { collectRenderers(it, renderers) }
-        response.contents?.sectionListRenderer?.let { collectRenderers(it, renderers) }
+
+        collectRenderersFromSearchResponse(response, renderers)
 
         return renderers.mapNotNull { rendererJson ->
             runCatching {
@@ -114,6 +120,29 @@ class YouTubeMusicRepository {
         }.distinctBy { it.id }.take(30)
     }
 
+    private fun collectRenderersFromSearchResponse(response: SearchResponse, output: MutableList<JsonObject>) {
+        val contents = response.contents
+        if (contents == null) return
+
+        contents.tabbedSearchResultsRenderer?.let { collectRenderers(it, output) }
+        contents.sectionListRenderer?.let { collectRenderers(it, output) }
+    }
+
+    private fun collectRenderersDeep(element: JsonElement, output: MutableList<JsonObject>) {
+        when (element) {
+            is JsonObject -> {
+                if (element.containsKey("musicResponsiveListItemRenderer")) {
+                    element["musicResponsiveListItemRenderer"]?.let { renderer ->
+                        if (renderer is JsonObject) output += renderer
+                    }
+                }
+                element.values.forEach { collectRenderersDeep(it, output) }
+            }
+            is JsonArray -> element.forEach { collectRenderersDeep(it, output) }
+            else -> Unit
+        }
+    }
+
     suspend fun resolveAudio(videoId: String): ResolvedAudio {
         val stream = extractor.extract(
             videoId = videoId,
@@ -122,10 +151,18 @@ class YouTubeMusicRepository {
             audioQuality = AudioQuality.HIGH,
         ) ?: error("YouTube Music returned no playable audio stream.")
 
+        val headers = stream.headers
+            .plus("User-Agent" to "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 " +
+                "(KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36")
+            .plus("Referer" to "https://music.youtube.com/")
+            .plus("Origin" to "https://music.youtube.com")
+
+        RESOLVED_HEADERS[stream.audioUrl] = headers
+
         return ResolvedAudio(
             url = stream.audioUrl,
             mimeType = stream.mimeType,
-            headers = stream.headers,
+            headers = headers,
         )
     }
 

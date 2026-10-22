@@ -1,7 +1,10 @@
 package com.tuneplayer.app.playback
 
+import android.net.Uri
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
+import androidx.media3.common.MediaItem
+import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
@@ -15,12 +18,26 @@ class PlaybackService : MediaSessionService() {
     override fun onCreate() {
         super.onCreate()
 
-        val dataSourceFactory = DefaultHttpDataSource.Factory()
-            .setDefaultRequestProperties(MEDIA_HEADERS)
+        val defaultHeaders = mapOf(
+            "User-Agent" to "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 " +
+                "(KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36",
+            "Referer" to "https://music.youtube.com/",
+            "Origin" to "https://music.youtube.com",
+            "Accept-Language" to "en-US,en;q=0.9",
+        )
+
+        // HTTP data source factory with default headers for YouTube
+        val httpDataSourceFactory = DefaultHttpDataSource.Factory()
+            .setDefaultRequestProperties(defaultHeaders)
             .setAllowCrossProtocolRedirects(true)
 
+        // DataSource factory handles content:// (local), file://, http://, https://
+        val dataSourceFactory = DefaultDataSource.Factory(this, httpDataSourceFactory)
+
+        val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory)
+
         val player = ExoPlayer.Builder(this)
-            .setMediaSourceFactory(DefaultMediaSourceFactory(dataSourceFactory))
+            .setMediaSourceFactory(mediaSourceFactory)
             .setAudioAttributes(
                 AudioAttributes.Builder()
                     .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
@@ -44,15 +61,5 @@ class PlaybackService : MediaSessionService() {
         }
         mediaSession = null
         super.onDestroy()
-    }
-
-    private companion object {
-        private val MEDIA_HEADERS = mapOf(
-            "User-Agent" to "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 " +
-                "(KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36",
-            "Referer" to "https://music.youtube.com/",
-            "Origin" to "https://music.youtube.com",
-            "Accept-Language" to "en-US,en;q=0.9",
-        )
     }
 }
