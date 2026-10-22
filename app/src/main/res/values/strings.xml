@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">TunePlayer</string>
+    <string name="widget_open_player">Open TunePlayer</string>
+    <string name="shortcut_search_short">Search</string>
+    <string name="shortcut_search_long">Search YouTube Music</string>
+    <string name="shortcut_queue_short">Queue</string>
+    <string name="shortcut_queue_long">Open play queue</string>
 </resources>

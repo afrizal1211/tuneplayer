@@ -13,12 +13,17 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
+import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.SessionToken
 import com.tuneplayer.app.TunePlayerApp
 import com.tuneplayer.app.data.model.Track
+import com.tuneplayer.app.data.prefs.AppTheme
 import com.tuneplayer.app.playback.PlaybackService
-import kotlinx.coroutines.launch
+import com.tuneplayer.app.widget.NowPlayingWidget
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+
+private const val DEFAULT_SLEEP_MINUTES = 30
 
 data class TunePlayerUiState(
     val localTracks: List<Track> = emptyList(),
@@ -34,11 +39,18 @@ data class TunePlayerUiState(
     val isSleepTimerActive: Boolean = false,
     val playbackQueue: List<Track> = emptyList(),
     val queueIndex: Int = 0,
+    val theme: AppTheme = AppTheme.System,
+    val equalizerEnabled: Boolean = false,
+    val bassBoostLevel: Int = 0,
+    val virtualizerLevel: Int = 0,
+    val lyrics: String? = null,
+    val isLoadingLyrics: Boolean = false,
 )
 
 class TunePlayerViewModel(application: Application) : AndroidViewModel(application) {
 
     private val app = application as TunePlayerApp
+    private var audioSessionId: Int? = null
     private val localRepository = app.localMusicRepository
     private val youTubeRepository = app.youTubeMusicRepository
 
@@ -53,6 +65,12 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
     private var controller: MediaController? = null
 
     init {
+        uiState = uiState.copy(
+            theme = app.settingsStore.theme,
+            equalizerEnabled = app.settingsStore.equalizerEnabled,
+            bassBoostLevel = app.settingsStore.bassBoostLevel,
+            virtualizerLevel = app.settingsStore.virtualizerLevel,
+        )
         controllerFuture.addListener(
             {
                 runCatching { controllerFuture.get() }
@@ -61,6 +79,7 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
                         connectedController.addListener(object : Player.Listener {
                             override fun onIsPlayingChanged(isPlaying: Boolean) {
                                 uiState = uiState.copy(isPlaying = isPlaying)
+                                publishWidgetState()
                             }
                         })
                         uiState = uiState.copy(
@@ -117,47 +136,48 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
     fun play(track: Track) {
         viewModelScope.launch {
             uiState = uiState.copy(error = null)
-            
-            // Add to queue if not already present
-            val currentQueue = uiState.playbackQueue
-            val existingIndex = currentQueue.indexOfFirst { it.id == track.id }
-            val (newQueue, newIndex) = if (existingIndex >= 0) {
-                currentQueue to existingIndex
-            } else {
-                val added = currentQueue + track
-                added to (added.size - 1)
+
+            // Enqueue without disturbing an existing queue slot, then play.
+            enqueue(track)
+            startTrack(track)
+        }
+    }
+
+    /** Adds [track] to the queue and points [TunePlayerUiState.queueIndex] at it. */
+    private fun enqueue(track: Track) {
+        val queue = uiState.playbackQueue
+        val existing = queue.indexOfFirst { it.id == track.id }
+        val newQueue = if (existing >= 0) queue else queue + track
+        val newIndex = if (existing >= 0) existing else newQueue.lastIndex
+        uiState = uiState.copy(playbackQueue = newQueue, queueIndex = newIndex)
+    }
+
+    private suspend fun startTrack(track: Track) {
+        if (track.isLocal) {
+            val mediaUri = track.mediaUri
+            if (mediaUri == null) {
+                uiState = uiState.copy(error = "Local track has no media URI.")
+                return
             }
-            uiState = uiState.copy(
-                playbackQueue = newQueue,
-                queueIndex = newIndex,
-            )
-            
-            if (track.isLocal) {
-                val mediaUri = track.mediaUri
-                if (mediaUri == null) {
-                    uiState = uiState.copy(error = "Local track has no media URI.")
-                    return@launch
-                }
-                playResolved(track, mediaUri, null)
-            } else {
-                val videoId = track.videoId
-                if (videoId == null) {
-                    uiState = uiState.copy(error = "YouTube track has no video id.")
-                    return@launch
-                }
-                uiState = uiState.copy(isSearching = true)
-                runCatching { youTubeRepository.resolveAudio(videoId) }
-                    .onSuccess { audio ->
-                        uiState = uiState.copy(isSearching = false)
-                        playResolved(track, audio.url, audio.mimeType)
-                    }
-                    .onFailure { error ->
-                        uiState = uiState.copy(
-                            isSearching = false,
-                            error = error.message ?: "Could not resolve YouTube audio.",
-                        )
-                    }
+            playResolved(track, mediaUri, null)
+        } else {
+            val videoId = track.videoId
+            if (videoId == null) {
+                uiState = uiState.copy(error = "YouTube track has no video id.")
+                return
             }
+            uiState = uiState.copy(isSearching = true)
+            runCatching { youTubeRepository.resolveAudio(videoId) }
+                .onSuccess { audio ->
+                    uiState = uiState.copy(isSearching = false)
+                    playResolved(track, audio.url, audio.mimeType)
+                }
+                .onFailure { error ->
+                    uiState = uiState.copy(
+                        isSearching = false,
+                        error = error.message ?: "Could not resolve YouTube audio.",
+                    )
+                }
         }
     }
 
@@ -165,116 +185,200 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
         val player = controller ?: return
         if (player.isPlaying) {
             player.pause()
-            cancelSleepTimer()
         } else {
             if (player.playbackState == Player.STATE_IDLE) {
                 player.prepare()
             }
             player.play()
-            startSleepTimerIfNeeded()
         }
     }
 
     private var sleepTimerJob: kotlinx.coroutines.Job? = null
 
-    private fun startSleepTimerIfNeeded() {
-        if (uiState.isSleepTimerActive && uiState.sleepDurationMillis > 0) {
-            sleepTimerJob?.cancel()
-            sleepTimerJob = viewModelScope.launch {
-                delay(uiState.sleepDurationMillis)
-                controller?.pause()
-                uiState = uiState.copy(isSleepTimerActive = false, sleepDurationMillis = 0)
-            }
+    /** Sleep timer is wall-clock: it counts down regardless of pause or track changes. */
+    private fun startSleepTimer() {
+        sleepTimerJob?.cancel()
+        val duration = uiState.sleepDurationMillis
+        if (!uiState.isSleepTimerActive || duration <= 0) return
+        sleepTimerJob = viewModelScope.launch {
+            delay(duration)
+            controller?.pause()
+            uiState = uiState.copy(isSleepTimerActive = false, sleepDurationMillis = 0)
+            sleepTimerJob = null
         }
     }
 
     fun cancelSleepTimer() {
         sleepTimerJob?.cancel()
         sleepTimerJob = null
-        uiState = uiState.copy(isSleepTimerActive = false, sleepDurationMillis = 0)
+        uiState = uiState.copy(isSleepTimerActive = false)
     }
 
+    /** Selecting a duration starts the countdown immediately. */
     fun setSleepDuration(minutes: Int) {
-        uiState = uiState.copy(sleepDurationMillis = minutes.toLong() * 60 * 1000)
-        if (!uiState.isSleepTimerActive) {
-            startSleepTimerIfNeeded()
-        }
+        uiState = uiState.copy(
+            sleepDurationMillis = minutes.toLong() * 60 * 1000,
+            isSleepTimerActive = minutes > 0,
+        )
+        startSleepTimer()
     }
 
     fun toggleSleepTimer() {
-        uiState = uiState.copy(
-            isSleepTimerActive = !uiState.isSleepTimerActive,
-            sleepDurationMillis = if (!uiState.isSleepTimerActive) uiState.sleepDurationMillis else 0
-        )
+        if (uiState.isSleepTimerActive) {
+            cancelSleepTimer()
+        } else {
+            setSleepDuration(DEFAULT_SLEEP_MINUTES)
+        }
     }
 
     fun addToQueue(track: Track) {
-        val newQueue = uiState.playbackQueue + track
-        val newIndex = if (uiState.playbackQueue.isEmpty()) 0 else uiState.queueIndex
-        uiState = uiState.copy(
-            playbackQueue = newQueue,
-            queueIndex = newIndex,
-        )
-        if (uiState.currentTrack == null) {
-            playFromQueue(newQueue, newIndex)
+        val wasEmpty = uiState.playbackQueue.isEmpty()
+        enqueue(track)
+        if (wasEmpty) {
+            val index = uiState.queueIndex
+            playFromQueue(uiState.playbackQueue, index)
         }
     }
 
     fun removeFromQueue(index: Int) {
+        if (index !in uiState.playbackQueue.indices) return
+        val playingId = uiState.currentTrack?.id
+        val removingCurrent = index == uiState.queueIndex
         val newQueue = uiState.playbackQueue.filterIndexed { i, _ -> i != index }
-        val newIndex = if (index < uiState.queueIndex && uiState.queueIndex > 0) uiState.queueIndex - 1
-        else if (index == uiState.queueIndex && newQueue.isNotEmpty()) uiState.queueIndex
-        else uiState.queueIndex.coerceAtMost(newQueue.size - 1).coerceAtLeast(0)
+        // Track the playing item by identity; fall back to index clamping.
+        val newIndex = playingId
+            ?.let { id -> newQueue.indexOfFirst { it.id == id } }
+            ?.takeIf { it >= 0 }
+            ?: uiState.queueIndex.coerceAtMost(newQueue.lastIndex).coerceAtLeast(0)
         uiState = uiState.copy(
             playbackQueue = newQueue,
             queueIndex = newIndex,
         )
+        if (newQueue.isEmpty()) {
+            clearQueue()
+        } else if (removingCurrent) {
+            playFromQueue(newQueue, newIndex)
+        }
     }
 
     fun clearQueue() {
+        controller?.stop()
+        controller?.clearMediaItems()
         uiState = uiState.copy(
             playbackQueue = emptyList(),
             queueIndex = 0,
+            currentTrack = null,
+            isPlaying = false,
         )
+        cancelSleepTimer()
+        publishWidgetState()
     }
 
     fun playFromQueue(queue: List<Track>, index: Int) {
-        if (queue.isEmpty() || index < 0 || index >= queue.size) return
+        if (index !in queue.indices) return
         val track = queue[index]
-        uiState = uiState.copy(queueIndex = index)
-        play(track)
+        uiState = uiState.copy(playbackQueue = queue, queueIndex = index)
+        viewModelScope.launch {
+            uiState = uiState.copy(error = null)
+            startTrack(track)
+        }
     }
 
     fun playNext() {
         val nextIndex = uiState.queueIndex + 1
-        if (nextIndex < uiState.playbackQueue.size) {
+        if (nextIndex in uiState.playbackQueue.indices) {
             playFromQueue(uiState.playbackQueue, nextIndex)
         }
     }
 
+    /** Inserts [track] directly after the current item, or appends when nothing plays. */
+    fun playNext(track: Track) {
+        val queue = uiState.playbackQueue
+        val existing = queue.indexOfFirst { it.id == track.id }
+        if (existing >= 0) {
+            if (existing != uiState.queueIndex + 1) moveInQueue(existing, uiState.queueIndex + 1)
+            return
+        }
+        val insertAt = if (queue.isEmpty()) 0 else (uiState.queueIndex + 1).coerceAtMost(queue.size)
+        val newQueue = queue.toMutableList().apply { add(insertAt, track) }
+        val playingId = queue.getOrNull(uiState.queueIndex)?.id
+        val newIndex = playingId
+            ?.let { id -> newQueue.indexOfFirst { it.id == id } }
+            ?.takeIf { it >= 0 }
+            ?: 0
+        uiState = uiState.copy(playbackQueue = newQueue, queueIndex = newIndex)
+        if (queue.isEmpty()) playFromQueue(newQueue, 0)
+    }
+
     fun playPrevious() {
         val prevIndex = uiState.queueIndex - 1
-        if (prevIndex >= 0) {
+        if (prevIndex in uiState.playbackQueue.indices) {
             playFromQueue(uiState.playbackQueue, prevIndex)
         }
     }
 
-    fun reorderQueue(fromIndex: Int, toIndex: Int) {
-        val newQueue = uiState.playbackQueue.toMutableList()
-        val item = newQueue.removeAt(fromIndex)
-        newQueue.add(toIndex, item)
-        val newIndex = if (uiState.queueIndex == fromIndex) toIndex
-        else if (fromIndex < uiState.queueIndex && toIndex >= uiState.queueIndex) uiState.queueIndex - 1
-        else if (fromIndex > uiState.queueIndex && toIndex <= uiState.queueIndex) uiState.queueIndex + 1
-        else uiState.queueIndex
+    fun setTheme(theme: AppTheme) {
+        uiState = uiState.copy(theme = theme)
+        ThemeController.set(theme)
+        app.settingsStore.theme = theme
+    }
+
+    fun updateEqualizer(enabled: Boolean, bass: Int, virtualizer: Int) {
         uiState = uiState.copy(
-            playbackQueue = newQueue,
-            queueIndex = newIndex.coerceAtMost(newQueue.size - 1).coerceAtLeast(0),
+            equalizerEnabled = enabled,
+            bassBoostLevel = bass,
+            virtualizerLevel = virtualizer,
         )
+        app.settingsStore.equalizerEnabled = enabled
+        app.settingsStore.bassBoostLevel = bass
+        app.settingsStore.virtualizerLevel = virtualizer
+        applyAudioEffects()
+    }
+
+    fun loadLyrics() {
+        val videoId = uiState.currentTrack?.videoId ?: run {
+            uiState = uiState.copy(lyrics = null, isLoadingLyrics = false)
+            return
+        }
+        viewModelScope.launch {
+            uiState = uiState.copy(isLoadingLyrics = true, lyrics = null)
+            val text = runCatching { youTubeRepository.fetchLyrics(videoId) }.getOrNull()
+            uiState = uiState.copy(isLoadingLyrics = false, lyrics = text)
+        }
+    }
+
+    private fun publishWidgetState() {
+        val track = uiState.currentTrack
+        NowPlayingWidget.publish(app, track?.title, track?.artist, uiState.isPlaying)
+    }
+
+    private fun applyAudioEffects() {
+        runCatching {
+            val sessionId = audioSessionId ?: return@runCatching
+            AudioEffects.apply(
+                sessionId = sessionId,
+                enabled = uiState.equalizerEnabled,
+                bass = uiState.bassBoostLevel,
+                virtualizerLevel = uiState.virtualizerLevel,
+            )
+        }
+    }
+
+    fun moveInQueue(fromIndex: Int, toIndex: Int) {
+        val queue = uiState.playbackQueue
+        if (fromIndex !in queue.indices || toIndex !in queue.indices) return
+        val playingId = queue.getOrNull(uiState.queueIndex)?.id
+        val newQueue = queue.toMutableList().apply { add(toIndex, removeAt(fromIndex)) }
+        val newIndex = playingId
+            ?.let { id -> newQueue.indexOfFirst { it.id == id } }
+            ?.takeIf { it >= 0 }
+            ?: 0
+        uiState = uiState.copy(playbackQueue = newQueue, queueIndex = newIndex)
     }
 
     override fun onCleared() {
         sleepTimerJob?.cancel()
+        AudioEffects.release()
         controller?.release()
         MediaController.releaseFuture(controllerFuture)
         youTubeRepository.close()
@@ -305,7 +409,9 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
         player.setMediaItem(mediaItem)
         player.prepare()
         player.play()
+        audioSessionId = (player as? ExoPlayer)?.audioSessionId?.takeIf { it != 0 }
         uiState = uiState.copy(currentTrack = track, isPlaying = true)
-        startSleepTimerIfNeeded()
+        applyAudioEffects()
+        publishWidgetState()
     }
 }

@@ -8,6 +8,8 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import com.tuneplayer.app.data.prefs.AppTheme
+import com.tuneplayer.app.ui.ThemeController
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 
@@ -25,11 +27,18 @@ private val DarkColors = darkColorScheme(
 
 @Composable
 fun TunePlayerTheme(content: @Composable () -> Unit) {
-    val darkTheme = isSystemInDarkTheme()
+    val darkTheme = when (ThemeController.theme) {
+        AppTheme.System -> isSystemInDarkTheme()
+        AppTheme.Light -> false
+        AppTheme.Dark -> true
+    }
+    val dynamicColor = ThemeController.theme == AppTheme.System
     val context = LocalContext.current
     val colorScheme = when {
-        Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && darkTheme -> dynamicDarkColorScheme(context)
-        Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> dynamicLightColorScheme(context)
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && dynamicColor && darkTheme ->
+            dynamicDarkColorScheme(context)
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && dynamicColor ->
+            dynamicLightColorScheme(context)
         darkTheme -> DarkColors
         else -> LightColors
     }

@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="youtube_search"
+        android:enabled="true"
+        android:icon="@drawable/ic_launcher"
+        android:shortcutLongLabel="@string/shortcut_search_long"
+        android:shortcutShortLabel="@string/shortcut_search_short">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetClass="com.tuneplayer.app.MainActivity"
+            android:targetPackage="com.tuneplayer.app">
+            <extra
+                android:name="com.tuneplayer.app.extra.OPEN_TAB"
+                android:value="youtube" />
+        </intent>
+    </shortcut>
+    <shortcut
+        android:shortcutId="queue"
+        android:enabled="true"
+        android:icon="@drawable/ic_launcher"
+        android:shortcutLongLabel="@string/shortcut_queue_long"
+        android:shortcutShortLabel="@string/shortcut_queue_short">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetClass="com.tuneplayer.app.MainActivity"
+            android:targetPackage="com.tuneplayer.app">
+            <extra
+                android:name="com.tuneplayer.app.extra.OPEN_TAB"
+                android:value="queue" />
+        </intent>
+    </shortcut>
+</shortcuts>

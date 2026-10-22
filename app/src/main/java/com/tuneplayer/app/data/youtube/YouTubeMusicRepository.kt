@@ -14,6 +14,9 @@ import com.metrolist.innertubex.models.response.SearchResponse
 import com.tuneplayer.app.data.model.Track
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
+import io.ktor.client.request.get
+import io.ktor.client.request.header
+import io.ktor.client.statement.bodyAsText
 import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.compression.ContentEncoding
@@ -22,7 +25,13 @@ import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.decodeFromJsonElement
 
@@ -35,6 +44,10 @@ data class ResolvedAudio(
 class YouTubeMusicRepository {
 
     companion object {
+        private const val WEB_USER_AGENT =
+            "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 " +
+                "(KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
+
         @Suppress("UNUSED_PARAMETER")
         val RESOLVED_HEADERS = java.util.concurrent.ConcurrentHashMap<String, Map<String, String>>()
     }
@@ -152,8 +165,7 @@ class YouTubeMusicRepository {
         ) ?: error("YouTube Music returned no playable audio stream.")
 
         val headers = stream.headers
-            .plus("User-Agent" to "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 " +
-                "(KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36")
+            .plus("User-Agent" to WEB_USER_AGENT)
             .plus("Referer" to "https://music.youtube.com/")
             .plus("Origin" to "https://music.youtube.com")
 
@@ -164,6 +176,33 @@ class YouTubeMusicRepository {
             mimeType = stream.mimeType,
             headers = headers,
         )
+    }
+
+    /**
+     * Fetches plain-text lyrics from YouTube's timedtext endpoint.
+     *
+     * Returns null when the video has no caption track. Only the default track
+     * is requested; translations are out of scope.
+     */
+    suspend fun fetchLyrics(videoId: String): String? = withContext(Dispatchers.IO) {
+        val url = "https://music.youtube.com/api/timedtext" +
+            "?v=$videoId&lang=en&fmt=json3&client=WEB_REMIX&c=WEB_REMIX"
+        val body = runCatching {
+            httpClient.get(url) { header("User-Agent", WEB_USER_AGENT) }.bodyAsText()
+        }.getOrNull().orEmpty()
+
+        val events = runCatching {
+            json.parseToJsonElement(body).jsonObject["events"]?.jsonArray
+        }.getOrNull() ?: return@withContext null
+
+        val lines = events.mapNotNull { event ->
+            event.jsonObject["segs"]?.jsonArray
+                ?.mapNotNull { seg -> seg.jsonObject["utf8"]?.jsonPrimitive?.contentOrNull }
+                ?.joinToString("")
+                ?.trim()
+                ?.takeIf { it.isNotEmpty() }
+        }
+        lines.takeIf { it.isNotEmpty() }?.joinToString("\n")
     }
 
     fun close() {
