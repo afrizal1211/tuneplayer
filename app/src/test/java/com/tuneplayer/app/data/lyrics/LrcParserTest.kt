@@ -1,3 +1,4 @@
+import com.tuneplayer.app.data.lyrics.LrcParser
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
