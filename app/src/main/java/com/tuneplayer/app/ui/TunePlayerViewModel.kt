@@ -18,6 +18,7 @@ import com.tuneplayer.app.TunePlayerApp
 import com.tuneplayer.app.data.model.Track
 import com.tuneplayer.app.playback.PlaybackService
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 
 data class TunePlayerUiState(
     val localTracks: List<Track> = emptyList(),
@@ -29,6 +30,10 @@ data class TunePlayerUiState(
     val isPlaying: Boolean = false,
     val playerReady: Boolean = false,
     val error: String? = null,
+    val sleepDurationMillis: Long = 0,
+    val isSleepTimerActive: Boolean = false,
+    val playbackQueue: List<Track> = emptyList(),
+    val queueIndex: Int = 0,
 )
 
 class TunePlayerViewModel(application: Application) : AndroidViewModel(application) {
@@ -112,6 +117,21 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
     fun play(track: Track) {
         viewModelScope.launch {
             uiState = uiState.copy(error = null)
+            
+            // Add to queue if not already present
+            val currentQueue = uiState.playbackQueue
+            val existingIndex = currentQueue.indexOfFirst { it.id == track.id }
+            val (newQueue, newIndex) = if (existingIndex >= 0) {
+                currentQueue to existingIndex
+            } else {
+                val added = currentQueue + track
+                added to (added.size - 1)
+            }
+            uiState = uiState.copy(
+                playbackQueue = newQueue,
+                queueIndex = newIndex,
+            )
+            
             if (track.isLocal) {
                 val mediaUri = track.mediaUri
                 if (mediaUri == null) {
@@ -145,15 +165,116 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
         val player = controller ?: return
         if (player.isPlaying) {
             player.pause()
+            cancelSleepTimer()
         } else {
             if (player.playbackState == Player.STATE_IDLE) {
                 player.prepare()
             }
             player.play()
+            startSleepTimerIfNeeded()
         }
     }
 
+    private var sleepTimerJob: kotlinx.coroutines.Job? = null
+
+    private fun startSleepTimerIfNeeded() {
+        if (uiState.isSleepTimerActive && uiState.sleepDurationMillis > 0) {
+            sleepTimerJob?.cancel()
+            sleepTimerJob = viewModelScope.launch {
+                delay(uiState.sleepDurationMillis)
+                controller?.pause()
+                uiState = uiState.copy(isSleepTimerActive = false, sleepDurationMillis = 0)
+            }
+        }
+    }
+
+    fun cancelSleepTimer() {
+        sleepTimerJob?.cancel()
+        sleepTimerJob = null
+        uiState = uiState.copy(isSleepTimerActive = false, sleepDurationMillis = 0)
+    }
+
+    fun setSleepDuration(minutes: Int) {
+        uiState = uiState.copy(sleepDurationMillis = minutes.toLong() * 60 * 1000)
+        if (!uiState.isSleepTimerActive) {
+            startSleepTimerIfNeeded()
+        }
+    }
+
+    fun toggleSleepTimer() {
+        uiState = uiState.copy(
+            isSleepTimerActive = !uiState.isSleepTimerActive,
+            sleepDurationMillis = if (!uiState.isSleepTimerActive) uiState.sleepDurationMillis else 0
+        )
+    }
+
+    fun addToQueue(track: Track) {
+        val newQueue = uiState.playbackQueue + track
+        val newIndex = if (uiState.playbackQueue.isEmpty()) 0 else uiState.queueIndex
+        uiState = uiState.copy(
+            playbackQueue = newQueue,
+            queueIndex = newIndex,
+        )
+        if (uiState.currentTrack == null) {
+            playFromQueue(newQueue, newIndex)
+        }
+    }
+
+    fun removeFromQueue(index: Int) {
+        val newQueue = uiState.playbackQueue.filterIndexed { i, _ -> i != index }
+        val newIndex = if (index < uiState.queueIndex && uiState.queueIndex > 0) uiState.queueIndex - 1
+        else if (index == uiState.queueIndex && newQueue.isNotEmpty()) uiState.queueIndex
+        else uiState.queueIndex.coerceAtMost(newQueue.size - 1).coerceAtLeast(0)
+        uiState = uiState.copy(
+            playbackQueue = newQueue,
+            queueIndex = newIndex,
+        )
+    }
+
+    fun clearQueue() {
+        uiState = uiState.copy(
+            playbackQueue = emptyList(),
+            queueIndex = 0,
+        )
+    }
+
+    fun playFromQueue(queue: List<Track>, index: Int) {
+        if (queue.isEmpty() || index < 0 || index >= queue.size) return
+        val track = queue[index]
+        uiState = uiState.copy(queueIndex = index)
+        play(track)
+    }
+
+    fun playNext() {
+        val nextIndex = uiState.queueIndex + 1
+        if (nextIndex < uiState.playbackQueue.size) {
+            playFromQueue(uiState.playbackQueue, nextIndex)
+        }
+    }
+
+    fun playPrevious() {
+        val prevIndex = uiState.queueIndex - 1
+        if (prevIndex >= 0) {
+            playFromQueue(uiState.playbackQueue, prevIndex)
+        }
+    }
+
+    fun reorderQueue(fromIndex: Int, toIndex: Int) {
+        val newQueue = uiState.playbackQueue.toMutableList()
+        val item = newQueue.removeAt(fromIndex)
+        newQueue.add(toIndex, item)
+        val newIndex = if (uiState.queueIndex == fromIndex) toIndex
+        else if (fromIndex < uiState.queueIndex && toIndex >= uiState.queueIndex) uiState.queueIndex - 1
+        else if (fromIndex > uiState.queueIndex && toIndex <= uiState.queueIndex) uiState.queueIndex + 1
+        else uiState.queueIndex
+        uiState = uiState.copy(
+            playbackQueue = newQueue,
+            queueIndex = newIndex.coerceAtMost(newQueue.size - 1).coerceAtLeast(0),
+        )
+    }
+
     override fun onCleared() {
+        sleepTimerJob?.cancel()
         controller?.release()
         MediaController.releaseFuture(controllerFuture)
         youTubeRepository.close()
@@ -185,5 +306,6 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
         player.prepare()
         player.play()
         uiState = uiState.copy(currentTrack = track, isPlaying = true)
+        startSleepTimerIfNeeded()
     }
 }
