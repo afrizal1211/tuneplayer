@@ -7,6 +7,7 @@ import com.tuneplayer.app.data.prefs.SettingsStore
 import com.tuneplayer.app.data.youtube.YouTubeMusicRepository
 import com.tuneplayer.app.data.prefs.PlayStatsStore
 import com.tuneplayer.app.data.prefs.PlaylistStore
+import com.tuneplayer.app.data.prefs.QueueStore
 import com.tuneplayer.app.log.LogCatcher
 
 class TunePlayerApp : Application() {
@@ -38,5 +39,9 @@ class TunePlayerApp : Application() {
 
     val playStatsStore: PlayStatsStore by lazy {
         PlayStatsStore(this)
+    }
+
+    val queueStore: QueueStore by lazy {
+        QueueStore(this)
     }
 }

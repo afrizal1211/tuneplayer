@@ -84,6 +84,7 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
     private val youTubeRepository = app.youTubeMusicRepository
     private val favoriteStore = app.favoriteStore
     private val playlistStore = app.playlistStore
+    private val queueStore = app.queueStore
     private val playStatsStore = app.playStatsStore
     private val resolvedUris = LinkedHashMap<String, String>()
     private var positionPollJob: kotlinx.coroutines.Job? = null
@@ -145,6 +146,7 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
                             playbackSpeed = connectedController.playbackParameters.speed,
                         )
                         startPositionPolling()
+                        maybeRestoreQueue()
                     }
                     .onFailure { error ->
                         LogCatcher.e(TAG, "Player connection failed", error)
@@ -162,6 +164,7 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
                 .onSuccess { tracks ->
                     uiState = uiState.copy(localTracks = tracks, isLoadingLocal = false)
                     refreshHistoryTracks()
+                    maybeRestoreQueue()
                 }
                 .onFailure { error ->
                     LogCatcher.e(TAG, "Local music load failed", error)
@@ -180,6 +183,8 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
         uiState = uiState.copy(historyTracks = resolved)
     }
 
+    private var pollTicks = 0
+
     private fun startPositionPolling() {
         positionPollJob?.cancel()
         positionPollJob = viewModelScope.launch {
@@ -193,6 +198,12 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
                             ?: uiState.currentTrack?.durationMs
                             ?: 0L,
                     )
+                }
+                // Roughly every 5s: prefs writes are cheap but not free.
+                pollTicks++
+                if (pollTicks % 20 == 0 && uiState.currentTrack != null) {
+                    queueStore.positionMs = uiState.positionMs
+                    queueStore.index = uiState.queueIndex
                 }
                 val lines = uiState.syncedLyrics
                 if (lines.isNotEmpty()) {
@@ -640,6 +651,7 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
     fun clearQueue() {
         controller?.stop()
         controller?.clearMediaItems()
+        queueStore.clear()
         uiState = uiState.copy(
             playbackQueue = emptyList(),
             queueIndex = 0,
@@ -679,6 +691,54 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
         val playerStart = playerIndexToQueueIndex.indexOfFirst { it >= startIndex }
             .takeIf { it >= 0 } ?: 0
         player.setMediaItems(built.map { it.first }, playerStart, 0L)
+        persistQueue()
+    }
+
+    private var restoreAttempted = false
+
+    /**
+     * Rebuilds the last queue once, as soon as both the controller and the
+     * library are available.
+     *
+     * Only ids that still resolve are kept; a queue of deleted files restores
+     * as empty rather than as a list of broken rows. Nothing autoplays: the
+     * saved item becomes current and the saved position is restored, so the
+     * user decides when to resume.
+     */
+    private fun maybeRestoreQueue() {
+        if (restoreAttempted) return
+        if (controller == null || uiState.localTracks.isEmpty()) return
+        if (uiState.playbackQueue.isNotEmpty()) {
+            // Something is already queued (shortcut, widget). Do not clobber it.
+            restoreAttempted = true
+            return
+        }
+        restoreAttempted = true
+        val ids = queueStore.ids
+        if (ids.isEmpty()) return
+        val known = (uiState.localTracks + uiState.searchResults).associateBy { it.id }
+        val queue = ids.mapNotNull { known[it] }
+        if (queue.isEmpty()) {
+            queueStore.clear()
+            return
+        }
+        val index = queueStore.index.coerceIn(queue.indices)
+        uiState = uiState.copy(
+            playbackQueue = queue,
+            queueIndex = index,
+            currentTrack = queue[index],
+            positionMs = queueStore.positionMs,
+        )
+        pushQueueToPlayer(queue, index)
+        val saved = queueStore.positionMs
+        if (saved > 0) controller?.seekTo(saved)
+        LogCatcher.d(TAG, "restored queue: ${queue.size} tracks at $index")
+    }
+
+    /** Mirrors the queue into prefs; called on every queue mutation. */
+    private fun persistQueue() {
+        queueStore.ids = uiState.playbackQueue.map { it.id }
+        queueStore.index = uiState.queueIndex
     }
 
     /** Player item index -> uiState queue index; empty when no queue is loaded. */
