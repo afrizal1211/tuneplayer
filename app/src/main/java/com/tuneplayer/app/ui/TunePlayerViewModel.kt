@@ -29,6 +29,7 @@ import com.tuneplayer.app.data.model.LibrarySort
 import com.tuneplayer.app.data.model.YouTubeAudioQuality
 import com.tuneplayer.app.data.model.applySort
 import com.tuneplayer.app.data.model.matchesQuery
+import com.tuneplayer.app.data.youtube.YouTubeSearchFilter
 import com.tuneplayer.app.data.prefs.AppTheme
 import com.tuneplayer.app.data.prefs.FavoriteStore
 import com.tuneplayer.app.data.lyrics.LrcParser
@@ -46,6 +47,9 @@ private const val DEFAULT_SLEEP_MINUTES = 30
 data class TunePlayerUiState(
     val localTracks: List<Track> = emptyList(),
     val searchResults: List<Track> = emptyList(),
+    val searchTopResult: Track? = null,
+    val searchFilter: YouTubeSearchFilter = YouTubeSearchFilter.ALL,
+    val searchCommitted: Boolean = false,
     val searchSuggestions: List<String> = emptyList(),
     val searchRecommendations: List<Track> = emptyList(),
     val isLoadingSuggestions: Boolean = false,
@@ -107,6 +111,7 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
     private val localRepository = app.localMusicRepository
     private val youTubeRepository = app.youTubeMusicRepository
     private val lrclibLyricsRepository = app.lrclibLyricsRepository
+    private var searchJob: Job? = null
     private var searchSuggestionsJob: Job? = null
     private val favoriteStore = app.favoriteStore
     private val playlistStore = app.playlistStore
@@ -369,9 +374,17 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
 
     fun updateQuery(query: String) {
         val changed = query.trim() != uiState.query.trim()
+        if (changed) {
+            searchJob?.cancel()
+            searchJob = null
+        }
         uiState = uiState.copy(
             query = query,
             searchResults = if (changed) emptyList() else uiState.searchResults,
+            searchTopResult = if (changed) null else uiState.searchTopResult,
+            searchCommitted = if (changed) false else uiState.searchCommitted,
+            isSearching = if (changed) false else uiState.isSearching,
+            error = if (changed) null else uiState.error,
             searchSuggestions = if (changed) emptyList() else uiState.searchSuggestions,
             searchRecommendations = if (changed) emptyList() else uiState.searchRecommendations,
         )
@@ -455,30 +468,60 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
     fun search() {
         val query = uiState.query.trim()
         if (query.isEmpty()) return
+        app.settingsStore.recordSearch(query)
+        uiState = uiState.copy(searchHistory = app.settingsStore.searchHistory)
+        runSearch(query, uiState.searchFilter)
+    }
+
+    /**
+     * Switches YouTube's search category. The filter row is only visible after
+     * a committed search, so an active query always has a result set to reload.
+     */
+    fun setSearchFilter(filter: YouTubeSearchFilter) {
+        if (filter == uiState.searchFilter) return
+        val query = uiState.query.trim()
+        val committed = uiState.searchCommitted
+        uiState = uiState.copy(searchFilter = filter)
+        if (committed && query.isNotEmpty()) runSearch(query, filter)
+    }
+
+    private fun runSearch(query: String, filter: YouTubeSearchFilter) {
         searchSuggestionsJob?.cancel()
         searchSuggestionsJob = null
-        app.settingsStore.recordSearch(query)
+        searchJob?.cancel()
         uiState = uiState.copy(
-            searchHistory = app.settingsStore.searchHistory,
+            searchFilter = filter,
+            searchCommitted = true,
+            isSearching = true,
+            searchResults = emptyList(),
+            searchTopResult = null,
             searchSuggestions = emptyList(),
             searchRecommendations = emptyList(),
             isLoadingSuggestions = false,
+            error = null,
         )
-        viewModelScope.launch {
-            uiState = uiState.copy(isSearching = true, error = null)
+        searchJob = viewModelScope.launch {
             try {
-                val tracks = youTubeRepository.search(query)
-                uiState = uiState.copy(searchResults = tracks, isSearching = false)
-                refreshHistoryTracks()
+                val results = youTubeRepository.search(query, filter)
+                if (uiState.query.trim() == query && uiState.searchFilter == filter) {
+                    uiState = uiState.copy(
+                        searchResults = results.tracks,
+                        searchTopResult = results.topResult,
+                        isSearching = false,
+                    )
+                    refreshHistoryTracks()
+                }
             } catch (cancelled: CancellationException) {
-                // Leaving the screen is not a search failure.
+                // A newer query or filter owns the screen now.
                 throw cancelled
             } catch (error: Exception) {
                 LogCatcher.e(TAG, "YouTube search failed", error)
-                uiState = uiState.copy(
-                    isSearching = false,
-                    error = error.message ?: app.getString(R.string.error_search_failed),
-                )
+                if (uiState.query.trim() == query && uiState.searchFilter == filter) {
+                    uiState = uiState.copy(
+                        isSearching = false,
+                        error = error.message ?: app.getString(R.string.error_search_failed),
+                    )
+                }
             }
         }
     }

@@ -175,4 +175,11 @@
     <string name="lyrics_source_lrclib">LRCLIB</string>
     <string name="search_suggestions_title">検索候補</string>
     <string name="search_recommendations_title">おすすめ</string>
+    <string name="search_filter_all">すべて</string>
+    <string name="search_filter_songs">曲</string>
+    <string name="search_filter_videos">動画</string>
+    <string name="search_top_result">トップ結果</string>
+    <string name="search_for_query">「%1$s」を検索</string>
+    <string name="search_fill_suggestion">候補を使用</string>
+    <string name="action_clear_search">検索をクリア</string>
 </resources>

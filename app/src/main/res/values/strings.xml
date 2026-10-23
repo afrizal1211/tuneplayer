@@ -175,4 +175,11 @@
     <string name="lyrics_source_lrclib">LRCLIB</string>
     <string name="search_suggestions_title">Suggestions</string>
     <string name="search_recommendations_title">Recommended</string>
+    <string name="search_filter_all">All</string>
+    <string name="search_filter_songs">Songs</string>
+    <string name="search_filter_videos">Videos</string>
+    <string name="search_top_result">Top result</string>
+    <string name="search_for_query">Search for “%1$s”</string>
+    <string name="search_fill_suggestion">Use suggestion</string>
+    <string name="action_clear_search">Clear search</string>
 </resources>

@@ -11,7 +11,6 @@ import com.metrolist.innertubex.extraction.YtConfigParserImpl
 import com.metrolist.innertubex.models.MusicResponsiveListItemRenderer
 import com.metrolist.innertubex.models.YouTubeClient
 import com.metrolist.innertubex.models.response.GetSearchSuggestionsResponse
-import com.metrolist.innertubex.models.response.SearchResponse
 import com.tuneplayer.app.data.model.AudioInfo
 import com.tuneplayer.app.data.model.Track
 import com.tuneplayer.app.data.model.YouTubeAudioQuality
@@ -52,6 +51,22 @@ data class YouTubeSearchSuggestions(
     val queries: List<String> = emptyList(),
     val tracks: List<Track> = emptyList(),
 )
+
+/** One YouTube Music search page: the promoted card plus the ordinary rows. */
+data class YouTubeSearchResults(
+    val topResult: Track? = null,
+    val tracks: List<Track> = emptyList(),
+)
+
+/**
+ * YouTube Music search categories. The tokens are the `params` values used by
+ * the web client; the All page is the only one with a promoted card shelf.
+ */
+enum class YouTubeSearchFilter(val params: String?) {
+    ALL(null),
+    SONGS("EgWKAQIIAWoKEAkQChAFEAMQBA=="),
+    VIDEOS("EgWKAQIQAWoKEAkQChAFEAMQBA=="),
+}
 
 private data class HomeShelf(
     val title: String,
@@ -146,15 +161,43 @@ class YouTubeMusicRepository {
         )
     }
 
-    suspend fun search(query: String): List<Track> {
-        val response = innerTube.search(YouTubeClient.WEB_REMIX, query = query).body<SearchResponse>()
+    suspend fun search(
+        query: String,
+        filter: YouTubeSearchFilter = YouTubeSearchFilter.ALL,
+    ): YouTubeSearchResults {
+        val response = innerTube.search(
+            client = YouTubeClient.WEB_REMIX,
+            query = query,
+            params = filter.params,
+        ).body<JsonObject>()
+
+        val cards = mutableListOf<JsonObject>()
+        collectNamedRenderers(response, "musicCardShelfRenderer", cards)
+        val topResult = cards.firstOrNull()?.let(::parseCardTopResult)
+
+        // Rows inside a promoted card are related items rather than ordinary
+        // results. Drop them from the list, and drop the promoted song too when
+        // it also appears further down the page.
+        val cardRowIds = if (topResult == null) {
+            emptySet()
+        } else {
+            cards.flatMap { card ->
+                val rows = mutableListOf<JsonObject>()
+                collectRenderersDeep(card, rows)
+                rows.mapNotNull(::parseTrackRenderer).map { it.id }
+            }.toSet()
+        }
+
         val renderers = mutableListOf<JsonObject>()
+        collectRenderersDeep(response, renderers)
 
-        collectRenderersFromSearchResponse(response, renderers)
-
-        return renderers.mapNotNull(::parseTrackRenderer)
-            .distinctBy { it.id }
-            .take(30)
+        return YouTubeSearchResults(
+            topResult = topResult,
+            tracks = renderers.mapNotNull(::parseTrackRenderer)
+                .filterNot { it.id in cardRowIds || it.id == topResult?.id }
+                .distinctBy { it.id }
+                .take(30),
+        )
     }
 
     /**
@@ -270,7 +313,12 @@ class YouTubeMusicRepository {
             val title = columns.getOrNull(0)?.firstOrNull()?.text ?: return@runCatching null
             val subtitle = columns.getOrNull(1).orEmpty()
             val subtitleTexts = subtitle.map { it.text.trim() }.filter { it.isNotEmpty() }
-            val artist = subtitleTexts.firstOrNull { !isSuggestionMetadata(it) } ?: "Unknown artist"
+            val artist = subtitleTexts.firstOrNull { text ->
+                !isSuggestionMetadata(text) &&
+                    parseDurationMs(text) == null &&
+                    !text.contains("views", ignoreCase = true) &&
+                    !text.contains("plays", ignoreCase = true)
+            } ?: "Unknown artist"
             val videoId = renderer.playlistItemData?.videoId
                 ?: renderer.navigationEndpoint?.watchEndpoint?.videoId
                 ?: return@runCatching null
@@ -343,25 +391,105 @@ class YouTubeMusicRepository {
             ?.takeIf { it.isNotEmpty() }
     }
 
-    private fun collectRenderersFromSearchResponse(response: SearchResponse, output: MutableList<JsonObject>) {
-        val contents = response.contents
-        if (contents == null) return
+    /**
+     * Reads the promoted card at the head of an All search.
+     *
+     * A song card carries its own watch endpoint, so the card itself is the
+     * result. An artist card only carries a browse endpoint; its first nested
+     * row is the promoted song, and the card title is the credit that row
+     * omits. Album and playlist cards have no playable top result.
+     */
+    private fun parseCardTopResult(card: JsonObject): Track? {
+        val endpoint = card["onTap"] as? JsonObject
+        val watch = endpoint?.get("watchEndpoint") as? JsonObject
+        if (watch != null) return parseCardTrack(card, watch)
 
-        contents.tabbedSearchResultsRenderer?.let { collectRenderers(it, output) }
-        contents.sectionListRenderer?.let { collectRenderers(it, output) }
+        val browse = endpoint?.get("browseEndpoint") as? JsonObject
+        if (browse != null && isArtistEndpoint(browse)) {
+            val rows = mutableListOf<JsonObject>()
+            collectRenderersDeep(card, rows)
+            val track = rows.firstOrNull()?.let(::parseTrackRenderer) ?: return null
+            val artist = textRuns(card["title"])
+            return if (artist.isNotBlank()) track.copy(artist = artist) else track
+        }
+        return null
+    }
+
+    private fun parseCardTrack(card: JsonObject, watch: JsonObject): Track? {
+        val videoId = (watch["videoId"] as? JsonPrimitive)?.contentOrNull ?: return null
+        val title = textRuns(card["title"]).takeIf { it.isNotBlank() } ?: return null
+        val subtitleTexts = textRunsList(card["subtitle"])
+        val artist = subtitleTexts.firstOrNull { text ->
+            !isSuggestionMetadata(text) &&
+                parseDurationMs(text) == null &&
+                !text.contains("views", ignoreCase = true) &&
+                !text.contains("plays", ignoreCase = true)
+        } ?: "Unknown artist"
+        val duration = subtitleTexts.mapNotNull(::parseDurationMs).firstOrNull() ?: 0L
+
+        return Track(
+            id = "yt:$videoId",
+            title = title,
+            artist = artist,
+            durationMs = duration,
+            artworkUri = musicThumbnailUrl(card),
+            videoId = videoId,
+            isLocal = false,
+        )
+    }
+
+    private fun isArtistEndpoint(browse: JsonObject): Boolean {
+        val configs = browse["browseEndpointContextSupportedConfigs"] as? JsonObject
+        val musicConfig = configs?.get("browseEndpointContextMusicConfig") as? JsonObject
+        val pageType = musicConfig?.get("pageType")?.jsonPrimitive?.contentOrNull
+        return pageType == "MUSIC_PAGE_TYPE_ARTIST"
+    }
+
+    private fun textRuns(element: JsonElement?): String {
+        val runs = (element as? JsonObject)?.get("runs") as? JsonArray
+        return runs?.joinToString("") { run ->
+            (run as? JsonObject)
+                ?.get("text")
+                ?.jsonPrimitive
+                ?.contentOrNull
+                .orEmpty()
+        }.orEmpty()
+    }
+
+    private fun textRunsList(element: JsonElement?): List<String> = textRuns(element)
+        .split(" • ")
+        .map { it.trim() }
+        .filter { it.isNotEmpty() }
+
+    private fun musicThumbnailUrl(owner: JsonObject): String? {
+        val thumbnailContainer = owner["thumbnail"] as? JsonObject
+        val renderer = thumbnailContainer?.get("musicThumbnailRenderer") as? JsonObject
+        val thumbnail = renderer?.get("thumbnail") as? JsonObject
+        val thumbnails = thumbnail?.get("thumbnails") as? JsonArray
+        return thumbnails
+            ?.lastOrNull()
+            ?.jsonObject
+            ?.get("url")
+            ?.jsonPrimitive
+            ?.contentOrNull
     }
 
     private fun collectRenderersDeep(element: JsonElement, output: MutableList<JsonObject>) {
+        collectNamedRenderers(element, "musicResponsiveListItemRenderer", output)
+    }
+
+    private fun collectNamedRenderers(
+        element: JsonElement,
+        key: String,
+        output: MutableList<JsonObject>,
+    ) {
         when (element) {
             is JsonObject -> {
-                if (element.containsKey("musicResponsiveListItemRenderer")) {
-                    element["musicResponsiveListItemRenderer"]?.let { renderer ->
-                        if (renderer is JsonObject) output += renderer
-                    }
-                }
-                element.values.forEach { collectRenderersDeep(it, output) }
+                (element[key] as? JsonObject)?.let(output::add)
+                element.values.forEach { collectNamedRenderers(it, key, output) }
             }
-            is JsonArray -> element.forEach { collectRenderersDeep(it, output) }
+
+            is JsonArray -> element.forEach { collectNamedRenderers(it, key, output) }
             else -> Unit
         }
     }
@@ -446,20 +574,6 @@ class YouTubeMusicRepository {
     fun close() {
         innerTube.close()
         httpClient.close()
-    }
-
-    private fun collectRenderers(element: JsonElement, output: MutableList<JsonObject>) {
-        when (element) {
-            is JsonObject -> {
-                element["musicResponsiveListItemRenderer"]?.let { renderer ->
-                    if (renderer is JsonObject) output += renderer
-                }
-                element.values.forEach { collectRenderers(it, output) }
-            }
-
-            is JsonArray -> element.forEach { collectRenderers(it, output) }
-            else -> Unit
-        }
     }
 
     private fun isSuggestionMetadata(text: String): Boolean =
