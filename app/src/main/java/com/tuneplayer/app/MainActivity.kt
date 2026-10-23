@@ -37,8 +37,8 @@ class MainActivity : ComponentActivity() {
         rememberTab(intent)
         val settings = (application as TunePlayerApp).settingsStore
         ThemeController.set(settings.theme)
-        ThemeController.setDynamicColor(settings.dynamicColor)
-        ThemeController.setPureBlack(settings.pureBlack)
+        ThemeController.updateDynamicColor(settings.dynamicColor)
+        ThemeController.updatePureBlack(settings.pureBlack)
         setContent {
             TunePlayerTheme {
                 val tab by initialTab

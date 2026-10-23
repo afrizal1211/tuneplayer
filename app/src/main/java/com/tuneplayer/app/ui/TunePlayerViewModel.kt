@@ -725,13 +725,13 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
 
     fun setDynamicColor(enabled: Boolean) {
         app.settingsStore.dynamicColor = enabled
-        ThemeController.setDynamicColor(enabled)
+        ThemeController.updateDynamicColor(enabled)
         uiState = uiState.copy(dynamicColor = enabled)
     }
 
     fun setPureBlack(enabled: Boolean) {
         app.settingsStore.pureBlack = enabled
-        ThemeController.setPureBlack(enabled)
+        ThemeController.updatePureBlack(enabled)
         uiState = uiState.copy(pureBlack = enabled)
     }
 

@@ -24,11 +24,11 @@ object ThemeController {
         this.theme = theme
     }
 
-    fun setDynamicColor(enabled: Boolean) {
+    fun updateDynamicColor(enabled: Boolean) {
         dynamicColor = enabled
     }
 
-    fun setPureBlack(enabled: Boolean) {
+    fun updatePureBlack(enabled: Boolean) {
         pureBlack = enabled
     }
 }
