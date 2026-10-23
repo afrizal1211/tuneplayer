@@ -1010,7 +1010,8 @@ private fun LyricsSheet(
                         imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                         contentDescription = stringResource(if (isPlaying) R.string.action_pause else R.string.action_play),
                     )
-                }                IconButton(onClick = onCycleRepeat) {
+                }
+                IconButton(onClick = onCycleRepeat) {
                     Icon(
                         imageVector = when (repeatMode) {
                             Player.REPEAT_MODE_ONE -> Icons.Default.RepeatOne
