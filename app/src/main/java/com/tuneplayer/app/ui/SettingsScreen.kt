@@ -1,5 +1,7 @@
 package com.tuneplayer.app.ui
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -7,13 +9,17 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
@@ -31,9 +37,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.tuneplayer.app.R
+import com.tuneplayer.app.data.backup.BackupManager
 import com.tuneplayer.app.data.prefs.AppTheme
 import com.tuneplayer.app.log.LogCatcher
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SettingsScreen(
     theme: AppTheme,
@@ -44,15 +52,56 @@ fun SettingsScreen(
     hapticsEnabled: Boolean,
     dynamicColor: Boolean,
     pureBlack: Boolean,
+    eqBands: List<Int>,
+    eqBandFreqs: List<Int>,
+    eqBandRange: IntRange?,
+    eqPreset: Int,
     onThemeChange: (AppTheme) -> Unit,
     onEqualizerChange: (Boolean, Int, Int) -> Unit,
     onKeepScreenOnChange: (Boolean) -> Unit,
     onHapticsChange: (Boolean) -> Unit,
     onDynamicColorChange: (Boolean) -> Unit,
     onPureBlackChange: (Boolean) -> Unit,
+    onEqBandChange: (Int, Int) -> Unit,
+    onEqPresetChange: (Int) -> Unit,
+    onReloadFromStores: () -> Unit,
 ) {
     var showLogs by remember { mutableStateOf(false) }
+    var backupStatus by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
+    val exportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json"),
+    ) { uri ->
+        if (uri != null) {
+            BackupManager.export(context, uri)
+                .onSuccess { count ->
+                    backupStatus = context.getString(R.string.backup_exported, count)
+                }
+                .onFailure { error ->
+                    backupStatus = context.getString(
+                        R.string.backup_failed,
+                        error.message ?: error.javaClass.simpleName,
+                    )
+                }
+        }
+    }
+    val importLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri != null) {
+            BackupManager.import(context, uri)
+                .onSuccess { count ->
+                    onReloadFromStores()
+                    backupStatus = context.getString(R.string.backup_imported, count)
+                }
+                .onFailure { error ->
+                    backupStatus = context.getString(
+                        R.string.backup_failed,
+                        error.message ?: error.javaClass.simpleName,
+                    )
+                }
+        }
+    }
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -104,6 +153,29 @@ fun SettingsScreen(
         )
 
         Spacer(Modifier.height(24.dp))
+        SettingsSectionTitle(stringResource(R.string.settings_backup))
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            TextButton(onClick = { exportLauncher.launch(backupFileName(context)) }) {
+                Text(stringResource(R.string.backup_export))
+            }
+            TextButton(onClick = { importLauncher.launch(arrayOf("application/json")) }) {
+                Text(stringResource(R.string.backup_import))
+            }
+        }
+        backupStatus?.let { status ->
+            Text(
+                text = status,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
+        Spacer(Modifier.height(24.dp))
         SettingsSectionTitle(stringResource(R.string.settings_diagnostics))
         Row(
             modifier = Modifier
@@ -121,7 +193,7 @@ fun SettingsScreen(
         )
 
         Spacer(Modifier.height(24.dp))
-        SettingsSectionTitle("Audio effects")
+        SettingsSectionTitle(stringResource(R.string.settings_audio_effects))
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -129,30 +201,75 @@ fun SettingsScreen(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Text("Enable effects", style = MaterialTheme.typography.bodyLarge)
+            Text(
+                stringResource(R.string.settings_enable_effects),
+                style = MaterialTheme.typography.bodyLarge,
+            )
             Switch(
                 checked = equalizerEnabled,
                 onCheckedChange = { onEqualizerChange(it, bassBoostLevel, virtualizerLevel) },
             )
         }
         EffectSlider(
-            label = "Bass boost",
+            label = stringResource(R.string.settings_bass_boost),
             value = bassBoostLevel,
             enabled = equalizerEnabled,
             onValueChange = { onEqualizerChange(equalizerEnabled, it, virtualizerLevel) },
         )
         EffectSlider(
-            label = "Virtualizer",
+            label = stringResource(R.string.settings_virtualizer),
             value = virtualizerLevel,
             enabled = equalizerEnabled,
             onValueChange = { onEqualizerChange(equalizerEnabled, bassBoostLevel, it) },
         )
         Text(
-            text = "Effects apply to the active playback session and reset when it ends.",
+            text = stringResource(R.string.settings_effects_note),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 8.dp),
         )
+
+        if (equalizerEnabled && eqBandFreqs.isNotEmpty()) {
+            Spacer(Modifier.height(16.dp))
+            SettingsSectionTitle(stringResource(R.string.settings_equalizer))
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                EQ_PRESET_LABELS.forEachIndexed { index, labelRes ->
+                    FilterChip(
+                        selected = eqPreset == index,
+                        onClick = { onEqPresetChange(index) },
+                        label = { Text(stringResource(labelRes)) },
+                    )
+                }
+            }
+            val min = eqBandRange?.first ?: -1500
+            val max = eqBandRange?.last ?: 1500
+            eqBandFreqs.forEachIndexed { index, freq ->
+                val level = eqBands.getOrNull(index) ?: 0
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = formatBandFreq(freq),
+                        style = MaterialTheme.typography.labelMedium,
+                        modifier = Modifier.width(56.dp),
+                    )
+                    Slider(
+                        value = level.toFloat(),
+                        valueRange = min.toFloat()..max.toFloat(),
+                        onValueChange = { onEqBandChange(index, it.toInt()) },
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(
+                        text = "%d dB".format(level / 100),
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.width(48.dp),
+                    )
+                }
+            }
+        }
     }
 
     if (showLogs) {
@@ -224,6 +341,19 @@ private fun LogViewerDialog(
         },
     )
 }
+
+private fun backupFileName(context: android.content.Context): String =
+    context.getString(R.string.backup_export_title)
+
+private val EQ_PRESET_LABELS = listOf(
+    R.string.eq_preset_flat,
+    R.string.eq_preset_bass,
+    R.string.eq_preset_vocal,
+    R.string.eq_preset_rock,
+)
+
+private fun formatBandFreq(freqHz: Int): String =
+    if (freqHz >= 1000) "%.1fk".format(freqHz / 1000f) else "$freqHz Hz"
 
 @Composable
 private fun SettingsToggleRow(

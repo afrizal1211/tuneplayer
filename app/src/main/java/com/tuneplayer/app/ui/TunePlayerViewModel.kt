@@ -59,6 +59,10 @@ data class TunePlayerUiState(
     val queueIndex: Int = 0,
     val theme: AppTheme = AppTheme.System,
     val equalizerEnabled: Boolean = false,
+    val eqBands: List<Int> = emptyList(),
+    val eqBandFreqs: List<Int> = emptyList(),
+    val eqBandRange: IntRange? = null,
+    val eqPreset: Int = -1,
     val bassBoostLevel: Int = 0,
     val virtualizerLevel: Int = 0,
     val lyrics: String? = null,
@@ -105,6 +109,8 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
             equalizerEnabled = app.settingsStore.equalizerEnabled,
             bassBoostLevel = app.settingsStore.bassBoostLevel,
             virtualizerLevel = app.settingsStore.virtualizerLevel,
+            eqBands = app.settingsStore.eqBands,
+            eqPreset = app.settingsStore.eqPreset,
             favoriteIds = favoriteStore.favorites(),
             librarySort = app.settingsStore.librarySort,
             librarySortDescending = app.settingsStore.librarySortDescending,
@@ -795,6 +801,41 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
         uiState = uiState.copy(pureBlack = enabled)
     }
 
+    /**
+     * Re-reads every store after a restore.
+     *
+     * The screen already holds composed state, so nothing updates unless it is
+     * pulled again here. Playback is left alone: the import may have replaced
+     * the queue, but stopping the current track mid-song would be worse.
+     */
+    fun reloadFromStores() {
+        val settings = app.settingsStore
+        ThemeController.set(settings.theme)
+        ThemeController.updateDynamicColor(settings.dynamicColor)
+        ThemeController.updatePureBlack(settings.pureBlack)
+        uiState = uiState.copy(
+            theme = settings.theme,
+            equalizerEnabled = settings.equalizerEnabled,
+            bassBoostLevel = settings.bassBoostLevel,
+            virtualizerLevel = settings.virtualizerLevel,
+            eqBands = settings.eqBands,
+            eqPreset = settings.eqPreset,
+            favoriteIds = favoriteStore.favorites(),
+            librarySort = settings.librarySort,
+            librarySortDescending = settings.librarySortDescending,
+            gridLayout = settings.gridLayout,
+            keepScreenOn = settings.keepScreenOn,
+            hapticsEnabled = settings.hapticsEnabled,
+            dynamicColor = settings.dynamicColor,
+            pureBlack = settings.pureBlack,
+            searchHistory = settings.searchHistory,
+            playlists = playlistStore.all(),
+        )
+        refreshHistoryTracks()
+        applyAudioEffects()
+        LogCatcher.d(TAG, "reloaded stores after restore")
+    }
+
     fun updateEqualizer(enabled: Boolean, bass: Int, virtualizer: Int) {
         uiState = uiState.copy(
             equalizerEnabled = enabled,
@@ -838,21 +879,54 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
                 enabled = uiState.equalizerEnabled,
                 bass = uiState.bassBoostLevel,
                 virtualizerLevel = uiState.virtualizerLevel,
+                bands = uiState.eqBands,
             )
+            refreshEqBands()
         }
     }
 
-    fun moveInQueue(fromIndex: Int, toIndex: Int) {
-        val queue = uiState.playbackQueue
-        if (fromIndex !in queue.indices || toIndex !in queue.indices || fromIndex == toIndex) return
-        val playingId = queue.getOrNull(uiState.queueIndex)?.id
-        val newQueue = queue.toMutableList().apply { add(toIndex, removeAt(fromIndex)) }
-        val newIndex = playingId
-            ?.let { id -> newQueue.indexOfFirst { it.id == id } }
-            ?.takeIf { it >= 0 }
-            ?: 0
-        uiState = uiState.copy(playbackQueue = newQueue, queueIndex = newIndex)
-        pushQueueToPlayer(newQueue, newIndex)
+    /**
+     * Pulls the platform's own band list after the effect attaches.
+     *
+     * Band count and frequency centres are device-specific, so the UI cannot
+     * assume five bands. Saved levels are padded or truncated to fit.
+     */
+    private fun refreshEqBands() {
+        val bands = AudioEffects.bands()
+        if (bands.isEmpty()) return
+        val levels = bands.map { band ->
+            uiState.eqBands.getOrNull(band.index) ?: band.levelMb
+        }
+        uiState = uiState.copy(
+            eqBands = levels,
+            eqBandFreqs = bands.map { it.centerFreqHz },
+            eqBandRange = bands.first().minMb..bands.first().maxMb,
+        )
+    }
+
+    fun setEqBand(index: Int, levelMb: Int) {
+        val range = uiState.eqBandRange ?: return
+        val clamped = levelMb.coerceIn(range.first, range.last)
+        val levels = uiState.eqBands.toMutableList()
+        while (levels.size <= index) levels += 0
+        levels[index] = clamped
+        app.settingsStore.eqBands = levels
+        app.settingsStore.eqPreset = -1
+        uiState = uiState.copy(eqBands = levels, eqPreset = -1)
+        AudioEffects.setBandLevel(index, clamped)
+    }
+
+    /** Applies a preset shape, resampled onto however many bands the device has. */
+    fun setEqPreset(preset: Int) {
+        val count = uiState.eqBands.size.coerceAtLeast(uiState.eqBandFreqs.size)
+        if (count == 0) return
+        val shape = EqPresets.shapes.getOrNull(preset) ?: return
+        val levels = EqPresets.resample(shape, count)
+        app.settingsStore.eqBands = levels
+        app.settingsStore.eqPreset = preset
+        uiState = uiState.copy(eqBands = levels, eqPreset = preset)
+        levels.forEachIndexed { index, level -> AudioEffects.setBandLevel(index, level) }
+        LogCatcher.d(TAG, "eq preset $preset over $count bands")
     }
 
     private companion object {

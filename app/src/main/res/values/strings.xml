@@ -108,4 +108,21 @@
     <string name="library_unknown_album">Unknown album</string>
     <string name="library_unknown_artist">Unknown artist</string>
     <string name="library_group_count">%1$d songs</string>
+    <string name="settings_audio_effects">Audio effects</string>
+    <string name="settings_enable_effects">Enable effects</string>
+    <string name="settings_bass_boost">Bass boost</string>
+    <string name="settings_virtualizer">Virtualizer</string>
+    <string name="settings_effects_note">Effects apply to the active playback session and reset when it ends.</string>
+    <string name="settings_equalizer">Equalizer</string>
+    <string name="eq_preset_flat">Flat</string>
+    <string name="eq_preset_bass">Bass</string>
+    <string name="eq_preset_vocal">Vocal</string>
+    <string name="eq_preset_rock">Rock</string>
+    <string name="settings_backup">Backup</string>
+    <string name="backup_export">Export backup</string>
+    <string name="backup_import">Import backup</string>
+    <string name="backup_exported">Exported %1$d settings keys.</string>
+    <string name="backup_imported">Imported %1$d settings keys. Restart to apply everything.</string>
+    <string name="backup_failed">Backup failed: %1$s</string>
+    <string name="backup_export_title">tuneplayer-backup.json</string>
 </resources>

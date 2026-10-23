@@ -361,6 +361,13 @@ fun TunePlayerScreen(
                     pureBlack = state.pureBlack,
                     onDynamicColorChange = viewModel::setDynamicColor,
                     onPureBlackChange = viewModel::setPureBlack,
+                    eqBands = state.eqBands,
+                    eqBandFreqs = state.eqBandFreqs,
+                    eqBandRange = state.eqBandRange,
+                    eqPreset = state.eqPreset,
+                    onEqBandChange = viewModel::setEqBand,
+                    onEqPresetChange = viewModel::setEqPreset,
+                    onReloadFromStores = viewModel::reloadFromStores,
                 )
 
                 7 -> StatsScreen(

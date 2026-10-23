@@ -108,4 +108,21 @@
     <string name="library_unknown_album">不明なアルバム</string>
     <string name="library_unknown_artist">不明なアーティスト</string>
     <string name="library_group_count">%1$d曲</string>
+    <string name="settings_audio_effects">オーディオ効果</string>
+    <string name="settings_enable_effects">効果を有効にする</string>
+    <string name="settings_bass_boost">低音ブースト</string>
+    <string name="settings_virtualizer">バーチャライザー</string>
+    <string name="settings_effects_note">効果は再生セッションに適用され、終了時にリセットされます。</string>
+    <string name="settings_equalizer">イコライザー</string>
+    <string name="eq_preset_flat">フラット</string>
+    <string name="eq_preset_bass">低音</string>
+    <string name="eq_preset_vocal">ボーカル</string>
+    <string name="eq_preset_rock">ロック</string>
+    <string name="settings_backup">バックアップ</string>
+    <string name="backup_export">バックアップを書き出す</string>
+    <string name="backup_import">バックアップを読み込む</string>
+    <string name="backup_exported">%1$d件の設定を書き出しました。</string>
+    <string name="backup_imported">%1$d件の設定を読み込みました。すべて反映するには再起動してください。</string>
+    <string name="backup_failed">バックアップに失敗しました: %1$s</string>
+    <string name="backup_export_title">tuneplayer-backup.json</string>
 </resources>
