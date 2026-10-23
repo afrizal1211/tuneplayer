@@ -110,7 +110,8 @@ fun TunePlayerScreen(
     viewModel: TunePlayerViewModel = viewModel(),
 ) {
     val state = viewModel.uiState
-    val context = LocalContext.current    val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+    val context = LocalContext.current
+    val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
         Manifest.permission.READ_MEDIA_AUDIO
     } else {
         Manifest.permission.READ_EXTERNAL_STORAGE
