@@ -58,7 +58,7 @@ object BackupManager {
         keys
     }
 
-    fun import(context: Context, uri: Uri): Result<Int> = runCatching {
+    fun restore(context: Context, uri: Uri): Result<Int> = runCatching {
         val text = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
             ?.toString(Charsets.UTF_8)
             ?: return@runCatching 0

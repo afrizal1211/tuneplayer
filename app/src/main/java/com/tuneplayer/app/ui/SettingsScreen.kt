@@ -89,7 +89,7 @@ fun SettingsScreen(
         ActivityResultContracts.OpenDocument(),
     ) { uri ->
         if (uri != null) {
-            BackupManager.import(context, uri)
+            BackupManager.restore(context, uri)
                 .onSuccess { count ->
                     onReloadFromStores()
                     backupStatus = context.getString(R.string.backup_imported, count)
