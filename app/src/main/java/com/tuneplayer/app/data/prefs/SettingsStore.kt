@@ -1,6 +1,7 @@
 package com.tuneplayer.app.data.prefs
 
 import android.content.Context
+import android.content.SharedPreferences
 import com.tuneplayer.app.data.model.LibrarySort
 
 enum class AppTheme { System, Light, Dark }
@@ -87,6 +88,13 @@ class SettingsStore(context: Context) {
             prefs.edit().putBoolean(KEY_GRID_LAYOUT, value).apply()
         }
 
+    /** Skips silent passages during playback (ExoPlayer silence skipping). */
+    var skipSilence: Boolean
+        get() = prefs.getBoolean(KEY_SKIP_SILENCE, false)
+        set(value) {
+            prefs.edit().putBoolean(KEY_SKIP_SILENCE, value).apply()
+        }
+
     var keepScreenOn: Boolean
         get() = prefs.getBoolean(KEY_KEEP_SCREEN_ON, false)
         set(value) {
@@ -119,6 +127,15 @@ class SettingsStore(context: Context) {
         searchHistory = emptyList()
     }
 
+    /** Let the playback service react to effect changes made by the UI. */
+    fun registerListener(listener: SharedPreferences.OnSharedPreferenceChangeListener) {
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+    }
+
+    fun unregisterListener(listener: SharedPreferences.OnSharedPreferenceChangeListener) {
+        prefs.unregisterOnSharedPreferenceChangeListener(listener)
+    }
+
     private companion object {
         const val KEY_THEME = "theme"
         const val KEY_EQ_ENABLED = "eq_enabled"
@@ -131,6 +148,7 @@ class SettingsStore(context: Context) {
         const val KEY_EQ_PRESET = "eq_preset"
         const val KEY_DYNAMIC_COLOR = "dynamic_color"
         const val KEY_PURE_BLACK = "pure_black"
+        const val KEY_SKIP_SILENCE = "skip_silence"
         const val KEY_KEEP_SCREEN_ON = "keep_screen_on"
         const val KEY_HAPTICS = "haptics"
         const val KEY_SEARCH_HISTORY = "search_history"

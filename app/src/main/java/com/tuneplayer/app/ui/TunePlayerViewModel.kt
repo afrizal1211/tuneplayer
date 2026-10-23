@@ -13,7 +13,6 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
-import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.SessionToken
 import com.tuneplayer.app.TunePlayerApp
 import com.tuneplayer.app.log.LogCatcher
@@ -49,6 +48,7 @@ data class TunePlayerUiState(
     val isSleepTimerActive: Boolean = false,
     val sleepFinishTrack: Boolean = false,
     val keepScreenOn: Boolean = false,
+    val skipSilence: Boolean = false,
     val hapticsEnabled: Boolean = true,
     val gridLayout: Boolean = false,
     val dynamicColor: Boolean = true,
@@ -84,7 +84,6 @@ data class TunePlayerUiState(
 class TunePlayerViewModel(application: Application) : AndroidViewModel(application) {
 
     private val app = application as TunePlayerApp
-    private var audioSessionId: Int? = null
     private val localRepository = app.localMusicRepository
     private val youTubeRepository = app.youTubeMusicRepository
     private val favoriteStore = app.favoriteStore
@@ -110,12 +109,15 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
             equalizerEnabled = app.settingsStore.equalizerEnabled,
             bassBoostLevel = app.settingsStore.bassBoostLevel,
             virtualizerLevel = app.settingsStore.virtualizerLevel,
-            eqBands = app.settingsStore.eqBands,
+            eqBands = normalizeEqBands(app.settingsStore.eqBands),
+            eqBandFreqs = AudioEffects.UI_BAND_FREQS_HZ,
+            eqBandRange = AudioEffects.UI_BAND_RANGE_MB,
             eqPreset = app.settingsStore.eqPreset,
             favoriteIds = favoriteStore.favorites(),
             librarySort = app.settingsStore.librarySort,
             librarySortDescending = app.settingsStore.librarySortDescending,
             keepScreenOn = app.settingsStore.keepScreenOn,
+            skipSilence = app.settingsStore.skipSilence,
             hapticsEnabled = app.settingsStore.hapticsEnabled,
             gridLayout = app.settingsStore.gridLayout,
             dynamicColor = app.settingsStore.dynamicColor,
@@ -632,6 +634,12 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
         uiState = uiState.copy(keepScreenOn = enabled)
     }
 
+    /** Persisted for the service; the prefs listener applies it live. */
+    fun setSkipSilence(enabled: Boolean) {
+        app.settingsStore.skipSilence = enabled
+        uiState = uiState.copy(skipSilence = enabled)
+    }
+
     fun setHapticsEnabled(enabled: Boolean) {
         app.settingsStore.hapticsEnabled = enabled
         uiState = uiState.copy(hapticsEnabled = enabled)
@@ -846,13 +854,16 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
             equalizerEnabled = settings.equalizerEnabled,
             bassBoostLevel = settings.bassBoostLevel,
             virtualizerLevel = settings.virtualizerLevel,
-            eqBands = settings.eqBands,
+            eqBands = normalizeEqBands(settings.eqBands),
+            eqBandFreqs = AudioEffects.UI_BAND_FREQS_HZ,
+            eqBandRange = AudioEffects.UI_BAND_RANGE_MB,
             eqPreset = settings.eqPreset,
             favoriteIds = favoriteStore.favorites(),
             librarySort = settings.librarySort,
             librarySortDescending = settings.librarySortDescending,
             gridLayout = settings.gridLayout,
             keepScreenOn = settings.keepScreenOn,
+            skipSilence = settings.skipSilence,
             hapticsEnabled = settings.hapticsEnabled,
             dynamicColor = settings.dynamicColor,
             pureBlack = settings.pureBlack,
@@ -860,7 +871,6 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
             playlists = playlistStore.all(),
         )
         refreshHistoryTracks()
-        applyAudioEffects()
         LogCatcher.d(TAG, "reloaded stores after restore")
     }
 
@@ -873,7 +883,6 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
         app.settingsStore.equalizerEnabled = enabled
         app.settingsStore.bassBoostLevel = bass
         app.settingsStore.virtualizerLevel = virtualizer
-        applyAudioEffects()
     }
 
     fun loadLyrics() {
@@ -910,37 +919,19 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
         NowPlayingWidget.publish(app, track?.title, track?.artist, uiState.isPlaying)
     }
 
-    private fun applyAudioEffects() {
-        runCatching {
-            val sessionId = audioSessionId ?: return@runCatching
-            AudioEffects.apply(
-                sessionId = sessionId,
-                enabled = uiState.equalizerEnabled,
-                bass = uiState.bassBoostLevel,
-                virtualizerLevel = uiState.virtualizerLevel,
-                bands = uiState.eqBands,
-            )
-            refreshEqBands()
-        }
-    }
-
     /**
-     * Pulls the platform's own band list after the effect attaches.
+     * Fits saved levels onto the five UI control points.
      *
-     * Band count and frequency centres are device-specific, so the UI cannot
-     * assume five bands. Saved levels are padded or truncated to fit.
+     * Older builds stored whatever band count the device reported, so a
+     * device switch could leave a different length behind. The service
+     * resamples the five points onto the live device; the UI just needs a
+     * stable count to render.
      */
-    private fun refreshEqBands() {
-        val bands = AudioEffects.bands()
-        if (bands.isEmpty()) return
-        val levels = bands.map { band ->
-            uiState.eqBands.getOrNull(band.index) ?: band.levelMb
-        }
-        uiState = uiState.copy(
-            eqBands = levels,
-            eqBandFreqs = bands.map { it.centerFreqHz },
-            eqBandRange = bands.first().minMb..bands.first().maxMb,
-        )
+    private fun normalizeEqBands(stored: List<Int>): List<Int> {
+        val count = AudioEffects.UI_BAND_FREQS_HZ.size
+        if (stored.isEmpty()) return List(count) { 0 }
+        val fitted = if (stored.size == count) stored else EqPresets.resample(stored, count)
+        return fitted.map { it.coerceIn(AudioEffects.UI_BAND_RANGE_MB) }
     }
 
     fun setEqBand(index: Int, levelMb: Int) {
@@ -952,7 +943,6 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
         app.settingsStore.eqBands = levels
         app.settingsStore.eqPreset = -1
         uiState = uiState.copy(eqBands = levels, eqPreset = -1)
-        AudioEffects.setBandLevel(index, clamped)
     }
 
     /** Applies a preset shape, resampled onto however many bands the device has. */
@@ -964,7 +954,6 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
         app.settingsStore.eqBands = levels
         app.settingsStore.eqPreset = preset
         uiState = uiState.copy(eqBands = levels, eqPreset = preset)
-        levels.forEachIndexed { index, level -> AudioEffects.setBandLevel(index, level) }
         LogCatcher.d(TAG, "eq preset $preset over $count bands")
     }
 
@@ -990,7 +979,6 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
     override fun onCleared() {
         positionPollJob?.cancel()
         sleepTimerJob?.cancel()
-        AudioEffects.release()
         controller?.release()
         MediaController.releaseFuture(controllerFuture)
         // The repository is Application-scoped. Closing it here killed the
@@ -1023,10 +1011,8 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
         }
         player.prepare()
         player.play()
-        audioSessionId = (player as? ExoPlayer)?.audioSessionId?.takeIf { it != 0 }
         uiState = uiState.copy(currentTrack = track, isPlaying = true)
         recordHistory(track.id)
-        applyAudioEffects()
         publishWidgetState()
     }
 

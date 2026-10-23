@@ -16,6 +16,18 @@ import android.media.audiofx.Virtualizer
  */
 object AudioEffects {
 
+    /**
+     * The five control points the UI always shows.
+     *
+     * Frequencies follow the common five-band layout; the service resamples
+     * them onto the device's real band count, so the UI does not have to wait
+     * for (or be coupled to) an audio session.
+     */
+    val UI_BAND_FREQS_HZ: List<Int> = listOf(60, 230, 910, 3600, 14000)
+
+    /** Millibel range used by the sliders; the service clamps per device. */
+    val UI_BAND_RANGE_MB: IntRange = -1500..1500
+
     /** One equalizer band as reported by the platform. */
     data class Band(
         val index: Int,
@@ -38,7 +50,7 @@ object AudioEffects {
         virtualizerLevel: Int,
         bands: List<Int> = emptyList(),
     ) {
-        if (!enabled) {
+        if (!enabled || sessionId <= 0) {
             release()
             return
         }
@@ -52,7 +64,30 @@ object AudioEffects {
         }
         bassBoost?.let { if (it.strengthSupported) it.setStrength(levelToStrength(bass)) }
         this.virtualizer?.let { if (it.strengthSupported) it.setStrength(levelToStrength(virtualizerLevel)) }
-        bands.forEachIndexed { index, level -> setBandLevel(index, level) }
+        applyBands(bands)
+    }
+
+    /**
+     * Maps [levels] (five UI points) onto however many bands the device has.
+     *
+     * Levels are millibels, and each device exposes its own range; clamp after
+     * resampling so a preset authored for +/-1500 mB stays usable on hardware
+     * with a narrower equalizer.
+     */
+    private fun applyBands(levels: List<Int>) {
+        val eq = equalizer ?: return
+        if (levels.isEmpty()) return
+        runCatching {
+            val count = eq.numberOfBands.toInt()
+            if (count <= 0) return@runCatching
+            val resampled = if (levels.size == count) levels else EqPresets.resample(levels, count)
+            val range = eq.bandLevelRange
+            val min = range[0].toInt()
+            val max = range[1].toInt()
+            resampled.forEachIndexed { index, level ->
+                eq.setBandLevel(index.toShort(), level.coerceIn(min, max).toShort())
+            }
+        }
     }
 
     /** Both BassBoost and Virtualizer use the platform short range 0..1000. */

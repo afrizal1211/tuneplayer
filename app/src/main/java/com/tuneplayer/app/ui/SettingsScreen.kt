@@ -48,6 +48,7 @@ fun SettingsScreen(
     equalizerEnabled: Boolean,
     bassBoostLevel: Int,
     virtualizerLevel: Int,
+    skipSilence: Boolean,
     keepScreenOn: Boolean,
     hapticsEnabled: Boolean,
     dynamicColor: Boolean,
@@ -58,6 +59,7 @@ fun SettingsScreen(
     eqPreset: Int,
     onThemeChange: (AppTheme) -> Unit,
     onEqualizerChange: (Boolean, Int, Int) -> Unit,
+    onSkipSilenceChange: (Boolean) -> Unit,
     onKeepScreenOnChange: (Boolean) -> Unit,
     onHapticsChange: (Boolean) -> Unit,
     onDynamicColorChange: (Boolean) -> Unit,
@@ -227,6 +229,17 @@ fun SettingsScreen(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 8.dp),
+        )
+        Spacer(Modifier.height(8.dp))
+        SettingsToggleRow(
+            label = stringResource(R.string.settings_skip_silence),
+            checked = skipSilence,
+            onCheckedChange = onSkipSilenceChange,
+        )
+        Text(
+            text = stringResource(R.string.settings_skip_silence_summary),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
         if (equalizerEnabled && eqBandFreqs.isNotEmpty()) {

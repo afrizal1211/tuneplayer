@@ -141,4 +141,6 @@
     <string name="action_skip_previous">前へ</string>
     <string name="action_lyrics">歌詞</string>
     <string name="library_refresh">ライブラリを再読み込み</string>
+    <string name="settings_skip_silence">無音をスキップ</string>
+    <string name="settings_skip_silence_summary">ポッドキャストやライブ録音の無音部分を飛ばします。</string>
 </resources>

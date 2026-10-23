@@ -95,6 +95,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -103,12 +104,15 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -183,6 +187,10 @@ fun TunePlayerScreen(
         }
     }
 
+    CompositionLocalProvider(
+        LocalHapticsEnabled provides state.hapticsEnabled,
+        LocalNowPlayingId provides state.currentTrack?.id,
+    ) {
     Scaffold(
         topBar = {
             TopAppBar(
@@ -426,10 +434,12 @@ fun TunePlayerScreen(
                     equalizerEnabled = state.equalizerEnabled,
                     bassBoostLevel = state.bassBoostLevel,
                     virtualizerLevel = state.virtualizerLevel,
+                    skipSilence = state.skipSilence,
                     keepScreenOn = state.keepScreenOn,
                     hapticsEnabled = state.hapticsEnabled,
                     onThemeChange = viewModel::setTheme,
                     onEqualizerChange = viewModel::updateEqualizer,
+                    onSkipSilenceChange = viewModel::setSkipSilence,
                     onKeepScreenOnChange = viewModel::setKeepScreenOn,
                     onHapticsChange = viewModel::setHapticsEnabled,
                     dynamicColor = state.dynamicColor,
@@ -513,6 +523,10 @@ fun TunePlayerScreen(
                     showPlayer = false
                     showLyricsSheet = true
                 },
+                onOpenQueue = {
+                    showPlayer = false
+                    selectedTab = 2
+                },
                 onDismiss = { showPlayer = false },
             )
         }
@@ -558,6 +572,7 @@ fun TunePlayerScreen(
                 },
             )
         }
+    }
     }
 }
 
@@ -1157,10 +1172,16 @@ private fun TrackRow(
     ) {
         Artwork(track = track, size = 48)
         Spacer(Modifier.width(12.dp))
+        val isCurrent = LocalNowPlayingId.current == track.id
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = track.title,
                 style = MaterialTheme.typography.bodyLarge,
+                color = if (isCurrent) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    Color.Unspecified
+                },
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -1178,7 +1199,16 @@ private fun TrackRow(
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        IconButton(onClick = onToggleFavorite) {
+        val hapticsEnabled = LocalHapticsEnabled.current
+        val hapticFeedback = LocalHapticFeedback.current
+        IconButton(
+            onClick = {
+                if (hapticsEnabled) {
+                    hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                }
+                onToggleFavorite()
+            },
+        ) {
             Icon(
                 imageVector = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                 contentDescription = stringResource(
@@ -1397,6 +1427,12 @@ private fun SleepTimerDialog(
 private val SLEEP_MINUTE_OPTIONS = listOf(5, 10, 15, 30, 45, 60, 90)
 
 private val PLAYBACK_SPEEDS = listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f)
+
+/** Honors the haptics switch without threading a boolean through every row. */
+private val LocalHapticsEnabled = staticCompositionLocalOf { true }
+
+/** Lets list rows highlight the track that is actually playing. */
+private val LocalNowPlayingId = staticCompositionLocalOf<String?> { null }
 
 @Composable
 private fun QueueScreen(
@@ -1638,6 +1674,7 @@ private fun NowPlayingSheet(
     onToggleFavorite: (Track) -> Unit,
     onShare: (Track) -> Unit,
     onOpenLyrics: () -> Unit,
+    onOpenQueue: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
@@ -1740,7 +1777,16 @@ private fun NowPlayingSheet(
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                IconButton(onClick = { onToggleFavorite(track) }) {
+                val hapticsEnabled = LocalHapticsEnabled.current
+                val hapticFeedback = LocalHapticFeedback.current
+                IconButton(
+                    onClick = {
+                        if (hapticsEnabled) {
+                            hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                        }
+                        onToggleFavorite(track)
+                    },
+                ) {
                     Icon(
                         imageVector = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                         contentDescription = stringResource(
@@ -1757,6 +1803,12 @@ private fun NowPlayingSheet(
                     Icon(
                         imageVector = Icons.Default.Subtitles,
                         contentDescription = stringResource(R.string.action_lyrics),
+                    )
+                }
+                IconButton(onClick = onOpenQueue) {
+                    Icon(
+                        imageVector = Icons.Default.QueueMusic,
+                        contentDescription = stringResource(R.string.tab_queue),
                     )
                 }
                 IconButton(onClick = { onShare(track) }) {
