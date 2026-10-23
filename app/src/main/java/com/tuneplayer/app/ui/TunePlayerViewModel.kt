@@ -36,6 +36,7 @@ import com.tuneplayer.app.data.lyrics.LyricsSource
 import com.tuneplayer.app.playback.PlaybackService
 import com.tuneplayer.app.widget.NowPlayingWidget
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
@@ -45,6 +46,9 @@ private const val DEFAULT_SLEEP_MINUTES = 30
 data class TunePlayerUiState(
     val localTracks: List<Track> = emptyList(),
     val searchResults: List<Track> = emptyList(),
+    val searchSuggestions: List<String> = emptyList(),
+    val searchRecommendations: List<Track> = emptyList(),
+    val isLoadingSuggestions: Boolean = false,
     val currentTrack: Track? = null,
     /** Codec/bitrate of the playing stream, when the player or resolver knows it. */
     val audioInfo: AudioInfo? = null,
@@ -101,6 +105,7 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
     private val localRepository = app.localMusicRepository
     private val youTubeRepository = app.youTubeMusicRepository
     private val lrclibLyricsRepository = app.lrclibLyricsRepository
+    private var searchSuggestionsJob: Job? = null
     private val favoriteStore = app.favoriteStore
     private val playlistStore = app.playlistStore
     private val queueStore = app.queueStore
@@ -361,14 +366,76 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     fun updateQuery(query: String) {
-        uiState = uiState.copy(query = query)
+        val changed = query.trim() != uiState.query.trim()
+        uiState = uiState.copy(
+            query = query,
+            searchResults = if (changed) emptyList() else uiState.searchResults,
+            searchSuggestions = if (changed) emptyList() else uiState.searchSuggestions,
+            searchRecommendations = if (changed) emptyList() else uiState.searchRecommendations,
+        )
+        scheduleSearchSuggestions(query)
+    }
+
+    /**
+     * Debounced YouTube Music typeahead.
+     *
+     * Partial queries are never recorded in search history; only [search]
+     * commits a term. Signed-in users get the account-aware dropdown, while
+     * guests still receive YouTube's public query completions and song rows.
+     */
+    private fun scheduleSearchSuggestions(rawQuery: String) {
+        searchSuggestionsJob?.cancel()
+        val query = rawQuery.trim()
+        if (query.isEmpty()) {
+            uiState = uiState.copy(
+                searchSuggestions = emptyList(),
+                searchRecommendations = emptyList(),
+                isLoadingSuggestions = false,
+            )
+            return
+        }
+        uiState = uiState.copy(isLoadingSuggestions = true)
+        searchSuggestionsJob = viewModelScope.launch {
+            delay(300)
+            try {
+                val suggestions = youTubeRepository.searchSuggestions(
+                    input = query,
+                    signedIn = uiState.youtubeSignedIn,
+                )
+                if (uiState.query.trim() == query) {
+                    uiState = uiState.copy(
+                        searchSuggestions = suggestions.queries,
+                        searchRecommendations = suggestions.tracks,
+                        isLoadingSuggestions = false,
+                    )
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                LogCatcher.d(TAG, "YouTube suggestions failed: ${error.message}")
+                if (uiState.query.trim() == query) {
+                    uiState = uiState.copy(
+                        searchSuggestions = emptyList(),
+                        searchRecommendations = emptyList(),
+                        isLoadingSuggestions = false,
+                    )
+                }
+            }
+        }
     }
 
     fun search() {
         val query = uiState.query.trim()
         if (query.isEmpty()) return
+        searchSuggestionsJob?.cancel()
+        searchSuggestionsJob = null
         app.settingsStore.recordSearch(query)
-        uiState = uiState.copy(searchHistory = app.settingsStore.searchHistory)
+        uiState = uiState.copy(
+            searchHistory = app.settingsStore.searchHistory,
+            searchSuggestions = emptyList(),
+            searchRecommendations = emptyList(),
+            isLoadingSuggestions = false,
+        )
         viewModelScope.launch {
             uiState = uiState.copy(isSearching = true, error = null)
             try {

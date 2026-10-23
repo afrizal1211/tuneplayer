@@ -10,6 +10,7 @@ import com.metrolist.innertubex.extraction.InnerTubeExtractor
 import com.metrolist.innertubex.extraction.YtConfigParserImpl
 import com.metrolist.innertubex.models.MusicResponsiveListItemRenderer
 import com.metrolist.innertubex.models.YouTubeClient
+import com.metrolist.innertubex.models.response.GetSearchSuggestionsResponse
 import com.metrolist.innertubex.models.response.SearchResponse
 import com.tuneplayer.app.data.model.AudioInfo
 import com.tuneplayer.app.data.model.Track
@@ -47,6 +48,11 @@ data class ResolvedAudio(
     val codec: String? = null,
 )
 
+data class YouTubeSearchSuggestions(
+    val queries: List<String> = emptyList(),
+    val tracks: List<Track> = emptyList(),
+)
+
 class YouTubeMusicRepository {
 
     companion object {
@@ -56,6 +62,10 @@ class YouTubeMusicRepository {
 
         @Suppress("UNUSED_PARAMETER")
         val RESOLVED_HEADERS = java.util.concurrent.ConcurrentHashMap<String, Map<String, String>>()
+
+        private val SEARCH_SUGGESTION_LABELS = setOf(
+            "song", "video", "album", "single", "ep", "playlist", "artist",
+        )
     }
 
     private val json = Json {
@@ -133,40 +143,130 @@ class YouTubeMusicRepository {
 
         collectRenderersFromSearchResponse(response, renderers)
 
-        return renderers.mapNotNull { rendererJson ->
-            runCatching {
-                val renderer = json.decodeFromJsonElement<MusicResponsiveListItemRenderer>(rendererJson)
-                val columns = renderer.flexColumns.mapNotNull {
-                    it.musicResponsiveListItemFlexColumnRenderer.text?.runs
-                }
-                val title = columns.getOrNull(0)?.firstOrNull()?.text ?: return@runCatching null
-                val subtitle = columns.getOrNull(1).orEmpty()
-                val artist = subtitle.firstOrNull()?.text ?: "Unknown artist"
-                val videoId = renderer.playlistItemData?.videoId
-                    ?: renderer.navigationEndpoint?.watchEndpoint?.videoId
-                    ?: return@runCatching null
-                val artwork = renderer.thumbnail
-                    ?.musicThumbnailRenderer
-                    ?.thumbnail
-                    ?.thumbnails
-                    ?.lastOrNull()
-                    ?.url
-                val duration = subtitle
-                    .mapNotNull { parseDurationMs(it.text) }
-                    .firstOrNull()
-                    ?: 0L
+        return renderers.mapNotNull(::parseTrackRenderer)
+            .distinctBy { it.id }
+            .take(30)
+    }
 
-                Track(
-                    id = "yt:$videoId",
-                    title = title,
-                    artist = artist,
-                    durationMs = duration,
-                    artworkUri = artwork,
-                    videoId = videoId,
-                    isLocal = false,
-                )
-            }.getOrNull()
-        }.distinctBy { it.id }.take(30)
+    /**
+     * YouTube Music's own typeahead: query completions plus the playable rows
+     * that sit under them in the search dropdown.
+     *
+     * Kept separate from [search] so typing does not record every partial query
+     * in history. The entity rows use the same renderer as search results, but
+     * their subtitles start with a type label ("Song", "Video", ...), which the
+     * track parser skips when picking the artist.
+     */
+    suspend fun searchSuggestions(
+        input: String,
+        signedIn: Boolean,
+    ): YouTubeSearchSuggestions {
+        val query = input.trim()
+        if (query.isEmpty()) return YouTubeSearchSuggestions()
+
+        val response = innerTube
+            .getSearchSuggestions(
+                client = YouTubeClient.WEB_REMIX,
+                input = query,
+                setLogin = signedIn,
+            )
+            .body<GetSearchSuggestionsResponse>()
+
+        val queries = mutableListOf<String>()
+        val tracks = mutableListOf<Track>()
+        response.contents.orEmpty().forEach { section ->
+            collectSuggestionContent(section, queries, tracks)
+        }
+
+        return YouTubeSearchSuggestions(
+            queries = queries
+                .filterNot { it.equals(query, ignoreCase = true) }
+                .distinct()
+                .take(6),
+            tracks = tracks.distinctBy { it.id }.take(6),
+        )
+    }
+
+    private fun parseTrackRenderer(rendererJson: JsonObject): Track? =
+        runCatching {
+            val renderer = json.decodeFromJsonElement<MusicResponsiveListItemRenderer>(rendererJson)
+            val columns = renderer.flexColumns.mapNotNull {
+                it.musicResponsiveListItemFlexColumnRenderer.text?.runs
+            }
+            val title = columns.getOrNull(0)?.firstOrNull()?.text ?: return@runCatching null
+            val subtitle = columns.getOrNull(1).orEmpty()
+            val subtitleTexts = subtitle.map { it.text.trim() }.filter { it.isNotEmpty() }
+            val artist = subtitleTexts.firstOrNull { !isSuggestionMetadata(it) } ?: "Unknown artist"
+            val videoId = renderer.playlistItemData?.videoId
+                ?: renderer.navigationEndpoint?.watchEndpoint?.videoId
+                ?: return@runCatching null
+            val artwork = renderer.thumbnail
+                ?.musicThumbnailRenderer
+                ?.thumbnail
+                ?.thumbnails
+                ?.lastOrNull()
+                ?.url
+            val duration = subtitleTexts
+                .mapNotNull(::parseDurationMs)
+                .firstOrNull()
+                ?: 0L
+
+            Track(
+                id = "yt:$videoId",
+                title = title,
+                artist = artist,
+                durationMs = duration,
+                artworkUri = artwork,
+                videoId = videoId,
+                isLocal = false,
+            )
+        }.getOrNull()
+
+    private fun collectSuggestionContent(
+        element: JsonElement,
+        queries: MutableList<String>,
+        tracks: MutableList<Track>,
+    ) {
+        when (element) {
+            is JsonObject -> {
+                (element["searchSuggestionRenderer"] as? JsonObject)?.let { renderer ->
+                    suggestionQuery(renderer)?.let(queries::add)
+                }
+                (element["musicResponsiveListItemRenderer"] as? JsonObject)?.let { renderer ->
+                    parseTrackRenderer(renderer)?.let(tracks::add)
+                }
+                element.values.forEach { collectSuggestionContent(it, queries, tracks) }
+            }
+
+            is JsonArray -> element.forEach {
+                collectSuggestionContent(it, queries, tracks)
+            }
+
+            else -> Unit
+        }
+    }
+
+    private fun suggestionQuery(renderer: JsonObject): String? {
+        val endpoint = renderer["navigationEndpoint"] as? JsonObject
+        val endpointQuery = endpoint?.get("searchEndpoint") as? JsonObject
+        val fromEndpoint = endpointQuery
+            ?.get("query")
+            ?.jsonPrimitive
+            ?.contentOrNull
+        if (!fromEndpoint.isNullOrBlank()) return fromEndpoint
+
+        val runs = (renderer["suggestion"] as? JsonObject)
+            ?.get("runs") as? JsonArray
+        return runs
+            ?.joinToString("") { run ->
+                (run as? JsonObject)
+                    ?.get("text")
+                    ?.jsonPrimitive
+                    ?.contentOrNull
+                    .orEmpty()
+            }
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
     }
 
     private fun collectRenderersFromSearchResponse(response: SearchResponse, output: MutableList<JsonObject>) {
@@ -287,6 +387,10 @@ class YouTubeMusicRepository {
             else -> Unit
         }
     }
+
+    private fun isSuggestionMetadata(text: String): Boolean =
+        text.all { it == '•' || it.isWhitespace() } ||
+            text.lowercase() in SEARCH_SUGGESTION_LABELS
 
     private fun parseDurationMs(text: String): Long? {
         val parts = text.trim().split(":")

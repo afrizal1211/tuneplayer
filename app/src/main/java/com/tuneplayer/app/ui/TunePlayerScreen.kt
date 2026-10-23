@@ -120,6 +120,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -398,6 +399,9 @@ fun TunePlayerScreen(
                     results = state.searchResults,
                     favoriteIds = state.favoriteIds,
                     isSearching = state.isSearching,
+                    suggestions = state.searchSuggestions,
+                    recommendations = state.searchRecommendations,
+                    isLoadingSuggestions = state.isLoadingSuggestions,
                     onQueryChange = viewModel::updateQuery,
                     onSearch = viewModel::search,
                     searchHistory = state.searchHistory,
@@ -998,6 +1002,9 @@ private fun YouTubeScreen(
     results: List<Track>,
     favoriteIds: Set<String>,
     isSearching: Boolean,
+    suggestions: List<String>,
+    recommendations: List<Track>,
+    isLoadingSuggestions: Boolean,
     searchHistory: List<String>,
     onQueryChange: (String) -> Unit,
     onSearch: () -> Unit,
@@ -1007,6 +1014,7 @@ private fun YouTubeScreen(
     onToggleFavorite: (Track) -> Unit,
     onShare: (Track) -> Unit,
 ) {
+    val focusManager = LocalFocusManager.current
     Column(modifier = Modifier.fillMaxSize()) {
         OutlinedTextField(
             value = query,
@@ -1061,7 +1069,24 @@ private fun YouTubeScreen(
             Spacer(Modifier.height(8.dp))
         }
 
-        if (isSearching) {
+        val hasSuggestions = query.isNotBlank() &&
+            (suggestions.isNotEmpty() || recommendations.isNotEmpty())
+        if (!isSearching && hasSuggestions) {
+            SearchSuggestionList(
+                suggestions = suggestions,
+                recommendations = recommendations,
+                favoriteIds = favoriteIds,
+                onSuggestionClick = { term ->
+                    onQueryChange(term)
+                    onSearch()
+                    focusManager.clearFocus()
+                },
+                onPlay = onPlay,
+                onPlayNext = onPlayNext,
+                onToggleFavorite = onToggleFavorite,
+                onShare = onShare,
+            )
+        } else if (isSearching || isLoadingSuggestions) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator()
             }
@@ -1080,6 +1105,78 @@ private fun YouTubeScreen(
                 onToggleFavorite = onToggleFavorite,
                 onShare = onShare,
             )
+        }
+    }
+}
+
+@Composable
+private fun SearchSuggestionList(
+    suggestions: List<String>,
+    recommendations: List<Track>,
+    favoriteIds: Set<String>,
+    onSuggestionClick: (String) -> Unit,
+    onPlay: (Track) -> Unit,
+    onPlayNext: (Track) -> Unit,
+    onToggleFavorite: (Track) -> Unit,
+    onShare: (Track) -> Unit,
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(bottom = 12.dp),
+    ) {
+        if (suggestions.isNotEmpty()) {
+            item(key = "search_suggestions_header") {
+                Text(
+                    text = stringResource(R.string.search_suggestions_title),
+                    style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp),
+                )
+            }
+            items(items = suggestions, key = { "suggestion:$it" }) { term ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onSuggestionClick(term) }
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Search,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    Text(
+                        text = term,
+                        style = MaterialTheme.typography.bodyLarge,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+        }
+
+        if (recommendations.isNotEmpty()) {
+            item(key = "search_recommendations_header") {
+                Text(
+                    text = stringResource(R.string.search_recommendations_title),
+                    style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp),
+                )
+            }
+            items(items = recommendations, key = { "recommendation:${it.id}" }) { track ->
+                TrackRow(
+                    track = track,
+                    isFavorite = track.id in favoriteIds,
+                    onPlay = { onPlay(track) },
+                    onPlayNext = { onPlayNext(track) },
+                    onToggleFavorite = { onToggleFavorite(track) },
+                    onShare = { onShare(track) },
+                )
+                HorizontalDivider(modifier = Modifier.padding(start = 72.dp))
+            }
         }
     }
 }
