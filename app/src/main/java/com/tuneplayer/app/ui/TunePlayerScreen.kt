@@ -8,6 +8,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -21,6 +23,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.layout.heightIn
@@ -42,6 +47,7 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.PlaylistPlay
+import androidx.compose.material.icons.filled.RemoveCircleOutline
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material.icons.filled.Timer
@@ -55,7 +61,6 @@ import androidx.compose.material.icons.filled.Equalizer
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material3.AssistChip
-import androidx.compose.material3.FlowRow
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.DropdownMenu
@@ -80,6 +85,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -148,7 +154,6 @@ fun TunePlayerScreen(
     var selectedTab by rememberSaveable { mutableIntStateOf(initialTab) }
     var showSleepDialog by rememberSaveable { mutableStateOf(false) }
     var showLyricsSheet by rememberSaveable { mutableStateOf(false) }
-    var showNerdStats by rememberSaveable { mutableStateOf(false) }
 
     // Tabs: 0 Library, 1 YouTube, 2 Queue, 3 Liked, 4 History, 5 Playlists, 6 Settings
     val keepScreenOn = state.keepScreenOn
@@ -275,6 +280,7 @@ fun TunePlayerScreen(
                     query = state.libraryQuery,
                     sort = state.librarySort,
                     sortDescending = state.librarySortDescending,
+                    gridLayout = state.gridLayout,
                     isLoading = state.isLoadingLocal,
                     hasPermission = hasAudioPermission,
                     onRequestPermission = { permissionLauncher.launch(permission) },
@@ -334,14 +340,15 @@ fun TunePlayerScreen(
                 )
 
                 5 -> PlaylistsScreen(
-                    playlists = viewModel.playlists(),
+                    playlists = state.playlists,
                     tracksFor = viewModel::tracksForPlaylist,
                     favoriteIds = state.favoriteIds,
                     onCreate = { name -> viewModel.createPlaylist(name) },
                     onDelete = viewModel::deletePlaylist,
                     onRename = { id, name -> viewModel.renamePlaylist(id, name) },
+                    onAddQueue = viewModel::addQueueToPlaylist,
+                    onRemoveTrack = { id, trackId -> viewModel.removeFromPlaylist(id, trackId) },
                     onPlay = viewModel::playPlaylist,
-                    onPlayTrack = viewModel::play,
                     onPlayNext = viewModel::playNext,
                     onToggleFavorite = viewModel::toggleFavorite,
                     onShare = { track -> shareTrack(context, track) },
@@ -413,6 +420,7 @@ private fun LibraryScreen(
     query: String,
     sort: LibrarySort,
     sortDescending: Boolean,
+    gridLayout: Boolean,
     isLoading: Boolean,
     hasPermission: Boolean,
     onRequestPermission: () -> Unit,
@@ -490,6 +498,7 @@ private fun LibraryScreen(
             onPlayNext = onPlayNext,
             onToggleFavorite = onToggleFavorite,
             onShare = onShare,
+            grid = gridLayout,
         )
     }
 }
@@ -624,6 +633,7 @@ private fun FavoritesScreen(
     )
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun YouTubeScreen(
     query: String,
@@ -722,7 +732,26 @@ private fun TrackList(
     onPlayNext: (Track) -> Unit,
     onToggleFavorite: (Track) -> Unit,
     onShare: (Track) -> Unit,
+    grid: Boolean = false,
 ) {
+    if (grid) {
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(2),
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            gridItems(items = tracks, key = { it.id }) { track ->
+                GridTrackCell(
+                    track = track,
+                    isFavorite = track.id in favoriteIds,
+                    onPlay = { onPlay(track) },
+                )
+            }
+        }
+        return
+    }
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = 12.dp),
@@ -741,6 +770,49 @@ private fun TrackList(
     }
 }
 
+/** Grid cell: artwork, title, artist. */
+@Composable
+private fun GridTrackCell(
+    track: Track,
+    isFavorite: Boolean,
+    onPlay: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onPlay)
+            .padding(4.dp),
+    ) {
+        Artwork(track = track, size = 160)
+        Spacer(Modifier.height(6.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = track.title,
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            if (isFavorite) {
+                Icon(
+                    Icons.Default.Favorite,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.size(14.dp),
+                )
+            }
+        }
+        Text(
+            text = track.artist,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
 @Composable
 private fun TrackRow(
     track: Track,
@@ -749,6 +821,7 @@ private fun TrackRow(
     onPlayNext: () -> Unit,
     onToggleFavorite: () -> Unit,
     onShare: () -> Unit,
+    trailing: (@Composable () -> Unit)? = null,
 ) {
     Row(
         modifier = Modifier
@@ -797,6 +870,7 @@ private fun TrackRow(
         IconButton(onClick = onShare) {
             Icon(Icons.Default.Share, contentDescription = stringResource(R.string.action_share))
         }
+        trailing?.invoke()
     }
 }
 
@@ -1357,13 +1431,15 @@ private fun PlaylistsScreen(
     onCreate: (String) -> Unit,
     onDelete: (String) -> Unit,
     onRename: (String, String) -> Unit,
+    onAddQueue: (String) -> Unit,
+    onRemoveTrack: (String, String) -> Unit,
     onPlay: (PlaylistStore.Playlist, Int) -> Unit,
-    onPlayTrack: (Track) -> Unit,
     onPlayNext: (Track) -> Unit,
     onToggleFavorite: (Track) -> Unit,
     onShare: (Track) -> Unit,
 ) {
     var openId by remember { mutableStateOf<String?>(null) }
+    var renameId by remember { mutableStateOf<String?>(null) }
     var showCreate by remember { mutableStateOf(false) }
 
     Column(modifier = Modifier.fillMaxSize()) {
@@ -1414,6 +1490,12 @@ private fun PlaylistsScreen(
                     },
                     trailingContent = {
                         Row {
+                            IconButton(onClick = { onAddQueue(playlist.id) }) {
+                                Icon(
+                                    Icons.Default.PlaylistAdd,
+                                    contentDescription = stringResource(R.string.action_add_to_playlist),
+                                )
+                            }
                             IconButton(onClick = { onPlay(playlist, 0) }) {
                                 Icon(
                                     Icons.Default.PlayArrow,
@@ -1455,19 +1537,27 @@ private fun PlaylistsScreen(
             title = { Text(open.name) },
             text = {
                 if (tracks.isEmpty()) {
-                    Text(stringResource(R.string.playlists_empty))
+                    Text(stringResource(R.string.playlist_empty))
                 } else {
                     LazyColumn(modifier = Modifier.heightIn(max = 360.dp)) {
-                        items(items = tracks, key = { it.id }) { track ->
+                        itemsIndexed(items = tracks, key = { _, t -> t.id }) { index, track ->
                             TrackRow(
                                 track = track,
                                 isFavorite = track.id in favoriteIds,
-                                onPlay = {
-                                    onPlay(open, tracks.indexOfFirst { it.id == track.id })
-                                },
+                                onPlay = { onPlay(open, index) },
                                 onPlayNext = { onPlayNext(track) },
                                 onToggleFavorite = { onToggleFavorite(track) },
                                 onShare = { onShare(track) },
+                                trailing = {
+                                    IconButton(onClick = { onRemoveTrack(open.id, track.id) }) {
+                                        Icon(
+                                            Icons.Default.RemoveCircleOutline,
+                                            contentDescription = stringResource(
+                                                R.string.action_remove_from_playlist,
+                                            ),
+                                        )
+                                    }
+                                },
                             )
                         }
                     }
@@ -1479,10 +1569,25 @@ private fun PlaylistsScreen(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { onRename(open.id, open.name); openId = null }) {
+                TextButton(onClick = { renameId = open.id; openId = null }) {
                     Text(stringResource(R.string.action_rename_playlist))
                 }
             },
+        )
+    }
+
+    val renaming = playlists.firstOrNull { it.id == renameId }
+    if (renaming != null) {
+        PlaylistNameDialog(
+            title = stringResource(R.string.action_rename_playlist),
+            confirmLabel = stringResource(R.string.action_rename_playlist),
+            initialName = renaming.name,
+            onConfirm = { name ->
+                onRename(renaming.id, name)
+                renameId = null
+                openId = null
+            },
+            onDismiss = { renameId = null },
         )
     }
 }
@@ -1493,6 +1598,7 @@ private fun PlaylistNameDialog(
     initialName: String,
     onConfirm: (String) -> Unit,
     onDismiss: () -> Unit,
+    confirmLabel: String? = null,
 ) {
     var name by remember { mutableStateOf(initialName) }
     AlertDialog(
@@ -1510,7 +1616,7 @@ private fun PlaylistNameDialog(
             TextButton(
                 onClick = { onConfirm(name) },
                 enabled = name.isNotBlank(),
-            ) { Text(stringResource(R.string.action_create_playlist)) }
+            ) { Text(confirmLabel ?: stringResource(R.string.action_create_playlist)) }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_close)) }

@@ -52,7 +52,7 @@ data class TunePlayerUiState(
     val gridLayout: Boolean = false,
     val searchHistory: List<String> = emptyList(),
     val historyTracks: List<Track> = emptyList(),
-    val lyricsOffsetMs: Long = 0L,
+    val playlists: List<PlaylistStore.Playlist> = emptyList(),
     val playbackQueue: List<Track> = emptyList(),
     val queueIndex: Int = 0,
     val theme: AppTheme = AppTheme.System,
@@ -109,6 +109,7 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
             hapticsEnabled = app.settingsStore.hapticsEnabled,
             gridLayout = app.settingsStore.gridLayout,
             searchHistory = app.settingsStore.searchHistory,
+            playlists = playlistStore.all(),
         )
         controllerFuture.addListener(
             {
@@ -296,6 +297,8 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
     private fun recordHistory(id: String) {
         favoriteStore.recordPlay(id)
         playStatsStore.record(id)
+        // Cheap: history is capped at 100 ids, and the tab must not go stale.
+        refreshHistoryTracks()
     }
 
     /** Stream URIs are short-lived; cap the cache and let it expire with the process. */
@@ -439,11 +442,13 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
         uiState = uiState.copy(isSleepTimerActive = false)
     }
 
-    /** Selecting a duration starts the countdown immediately. */
+    /** Selecting a duration starts the countdown immediately, disarming finish-track. */
     fun setSleepDuration(minutes: Int) {
+        sleepTimerFinishTrack = false
         uiState = uiState.copy(
             sleepDurationMillis = minutes.toLong() * 60 * 1000,
             isSleepTimerActive = minutes > 0,
+            sleepFinishTrack = false,
         )
         startSleepTimer()
     }
@@ -480,7 +485,8 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
         val shuffled = tracks.shuffled()
         uiState = uiState.copy(playbackQueue = shuffled, queueIndex = 0)
         pushQueueToPlayer(shuffled, 0)
-        startTrack(shuffled.first())
+        val first = shuffled.first()
+        viewModelScope.launch { startTrack(first) }
         LogCatcher.d(TAG, "shuffleAll: ${shuffled.size} tracks")
     }
 
@@ -490,7 +496,8 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
         if (tracks.isEmpty()) return
         uiState = uiState.copy(playbackQueue = tracks, queueIndex = 0)
         pushQueueToPlayer(tracks, 0)
-        startTrack(tracks.first())
+        val first = tracks.first()
+        viewModelScope.launch { startTrack(first) }
         LogCatcher.d(TAG, "playAll: ${tracks.size} tracks")
     }
 
@@ -498,28 +505,51 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
 
     fun playlists(): List<PlaylistStore.Playlist> = playlistStore.all()
 
+    /** Re-reads the store after a mutation so the UI sees the new list. */
+    private fun refreshPlaylists() {
+        uiState = uiState.copy(playlists = playlistStore.all())
+    }
+
     fun createPlaylist(name: String): PlaylistStore.Playlist? {
         val trimmed = name.trim()
         if (trimmed.isEmpty()) return null
         val created = playlistStore.create(trimmed)
+        refreshPlaylists()
         LogCatcher.d(TAG, "createPlaylist: $trimmed")
         return created
     }
 
-    fun deletePlaylist(id: String) = playlistStore.delete(id)
+    fun deletePlaylist(id: String) {
+        playlistStore.delete(id)
+        refreshPlaylists()
+    }
 
-    fun renamePlaylist(id: String, name: String) = playlistStore.rename(id, name)
+    fun renamePlaylist(id: String, name: String) {
+        playlistStore.rename(id, name)
+        refreshPlaylists()
+    }
 
     fun addToPlaylist(playlistId: String, track: Track) {
         playlistStore.addTrack(playlistId, track.id)
+        refreshPlaylists()
         LogCatcher.d(TAG, "addToPlaylist: ${track.title} -> $playlistId")
     }
 
-    fun removeFromPlaylist(playlistId: String, trackId: String) =
+    fun removeFromPlaylist(playlistId: String, trackId: String) {
         playlistStore.removeTrack(playlistId, trackId)
+        refreshPlaylists()
+    }
 
-    fun moveInPlaylist(playlistId: String, from: Int, to: Int) =
+    fun moveInPlaylist(playlistId: String, from: Int, to: Int) {
         playlistStore.moveTrack(playlistId, from, to)
+        refreshPlaylists()
+    }
+
+    /** Bulk-adds everything currently queued; used by the playlist screen. */
+    fun addQueueToPlaylist(playlistId: String) {
+        uiState.playbackQueue.forEach { playlistStore.addTrack(playlistId, it.id) }
+        refreshPlaylists()
+    }
 
     /** Resolves playlist ids against the local library plus current search results. */
     fun tracksForPlaylist(playlist: PlaylistStore.Playlist): List<Track> {
@@ -530,9 +560,11 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
     fun playPlaylist(playlist: PlaylistStore.Playlist, startIndex: Int = 0) {
         val tracks = tracksForPlaylist(playlist)
         if (tracks.isEmpty()) return
-        uiState = uiState.copy(playbackQueue = tracks, queueIndex = startIndex)
-        pushQueueToPlayer(tracks, startIndex)
-        startTrack(tracks[startIndex])
+        val index = startIndex.coerceIn(tracks.indices)
+        uiState = uiState.copy(playbackQueue = tracks, queueIndex = index)
+        pushQueueToPlayer(tracks, index)
+        val first = tracks[index]
+        viewModelScope.launch { startTrack(first) }
     }
 
     // ---- Stats ----
@@ -565,11 +597,6 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
     fun clearSearchHistory() {
         app.settingsStore.clearSearchHistory()
         uiState = uiState.copy(searchHistory = emptyList())
-    }
-
-    /** Shifts synced lyrics so line N matches audio N+offsetMs. */
-    fun setLyricsOffset(offsetMs: Long) {
-        uiState = uiState.copy(lyricsOffsetMs = offsetMs)
     }
 
     fun addToQueue(track: Track) {

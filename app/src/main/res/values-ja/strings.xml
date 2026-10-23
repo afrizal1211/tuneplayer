@@ -83,17 +83,13 @@
     <string name="action_delete_playlist">プレイリストを削除</string>
     <string name="action_rename_playlist">名前を変更</string>
     <string name="playlist_name_hint">プレイリスト名</string>
-    <string name="playlist_pick">どのプレイリストに追加しますか？</string>
     <string name="playlist_track_count">%1$d曲</string>
     <string name="search_history_title">最近の検索</string>
     <string name="search_history_clear">消去</string>
     <string name="action_toggle_layout">リスト/グリッド切替</string>
-    <string name="layout_grid">グリッド</string>
-    <string name="layout_list">リスト</string>
     <string name="settings_playback">再生</string>
     <string name="settings_keep_screen_on">再生中は画面をオンに保つ</string>
     <string name="settings_haptics">触覚フィードバック</string>
     <string name="sleep_finish_track">現在の曲の終了後に停止</string>
-    <string name="lyrics_offset">歌詞のオフセット</string>
-    <string name="nerd_stats">再生中の詳細</string>
+    <string name="playlist_empty">このプレイリストには曲がありません。</string>
 </resources>

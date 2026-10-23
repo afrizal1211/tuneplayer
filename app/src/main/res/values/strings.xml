@@ -83,17 +83,13 @@
     <string name="action_delete_playlist">Delete playlist</string>
     <string name="action_rename_playlist">Rename</string>
     <string name="playlist_name_hint">Playlist name</string>
-    <string name="playlist_pick">Add to which playlist?</string>
     <string name="playlist_track_count">%1$d tracks</string>
     <string name="search_history_title">Recent searches</string>
     <string name="search_history_clear">Clear</string>
     <string name="action_toggle_layout">Toggle list/grid</string>
-    <string name="layout_grid">Grid</string>
-    <string name="layout_list">List</string>
     <string name="settings_playback">Playback</string>
     <string name="settings_keep_screen_on">Keep screen on while playing</string>
     <string name="settings_haptics">Haptics</string>
     <string name="sleep_finish_track">Finish current track</string>
-    <string name="lyrics_offset">Lyrics offset</string>
-    <string name="nerd_stats">Now playing details</string>
+    <string name="playlist_empty">No tracks in this playlist.</string>
 </resources>
