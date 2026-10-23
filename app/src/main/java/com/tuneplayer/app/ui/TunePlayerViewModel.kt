@@ -16,6 +16,7 @@ import androidx.media3.session.MediaController
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.SessionToken
 import com.tuneplayer.app.TunePlayerApp
+import com.tuneplayer.app.log.LogCatcher
 import com.tuneplayer.app.R
 import com.tuneplayer.app.data.model.Track
 import com.tuneplayer.app.data.model.LibrarySort
@@ -53,6 +54,8 @@ data class TunePlayerUiState(
     val isLoadingLyrics: Boolean = false,
     val syncedLyrics: List<LrcParser.LrcLine> = emptyList(),
     val activeLyricIndex: Int = -1,
+    val positionMs: Long = 0L,
+    val durationMs: Long = 0L,
     val isShuffleEnabled: Boolean = false,
     val repeatMode: Int = Player.REPEAT_MODE_OFF,
     val playbackSpeed: Float = 1.0f,
@@ -124,6 +127,7 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
                         startPositionPolling()
                     }
                     .onFailure { error ->
+                        LogCatcher.e(TAG, "Player connection failed", error)
                         uiState = uiState.copy(error = error.message ?: app.getString(R.string.error_connection))
                     }
             },
@@ -139,6 +143,7 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
                     uiState = uiState.copy(localTracks = tracks, isLoadingLocal = false)
                 }
                 .onFailure { error ->
+                    LogCatcher.e(TAG, "Local music load failed", error)
                     uiState = uiState.copy(
                         isLoadingLocal = false,
                         error = error.message ?: app.getString(R.string.error_local_failed),
@@ -151,10 +156,19 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
         positionPollJob?.cancel()
         positionPollJob = viewModelScope.launch {
             while (true) {
+                val player = controller
+                if (player != null) {
+                    uiState = uiState.copy(
+                        positionMs = player.currentPosition.coerceAtLeast(0L),
+                        durationMs = player.duration
+                            .takeIf { it > 0 && it != androidx.media3.common.C.TIME_UNSET }
+                            ?: uiState.currentTrack?.durationMs
+                            ?: 0L,
+                    )
+                }
                 val lines = uiState.syncedLyrics
                 if (lines.isNotEmpty()) {
-                    val pos = controller?.currentPosition ?: 0L
-                    val idx = LrcParser.activeIndex(lines, pos)
+                    val idx = LrcParser.activeIndex(lines, uiState.positionMs)
                     if (idx != uiState.activeLyricIndex) {
                         uiState = uiState.copy(activeLyricIndex = idx)
                     }
@@ -162,6 +176,18 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
                 delay(250)
             }
         }
+    }
+
+    /** Seeks to [positionMs], clamped to the known duration. */
+    fun seekTo(positionMs: Long) {
+        val player = controller ?: run {
+            LogCatcher.w(TAG, "seekTo ignored: player not ready")
+            return
+        }
+        val target = positionMs.coerceAtLeast(0L)
+        player.seekTo(target)
+        LogCatcher.d(TAG, "seekTo ${target}ms")
+        uiState = uiState.copy(positionMs = target)
     }
 
     /** Mirrors ExoPlayer's own auto-advance (shuffle, repeat-one, next track) into uiState. */
@@ -270,6 +296,7 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
                     uiState = uiState.copy(searchResults = tracks, isSearching = false)
                 }
                 .onFailure { error ->
+                    LogCatcher.e(TAG, "YouTube search failed", error)
                     uiState = uiState.copy(
                         isSearching = false,
                         error = error.message ?: app.getString(R.string.error_search_failed),
@@ -279,6 +306,7 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     fun play(track: Track) {
+        LogCatcher.d(TAG, "play: ${track.title} local=${track.isLocal}")
         viewModelScope.launch {
             uiState = uiState.copy(error = null)
 
@@ -321,6 +349,7 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
                     playResolved(track, audio.url, audio.mimeType)
                 }
                 .onFailure { error ->
+                    LogCatcher.e(TAG, "YouTube resolve failed", error)
                     uiState = uiState.copy(
                         isSearching = false,
                         error = error.message ?: app.getString(R.string.error_resolve_failed),
@@ -560,6 +589,7 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     private companion object {
+        const val TAG = "TunePlayerVM"
         const val MAX_RESOLVED_CACHE = 50
     }
 

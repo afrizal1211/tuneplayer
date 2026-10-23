@@ -82,9 +82,27 @@ jobs:
       - name: Grant execute permission
         run: chmod +x gradlew
 
-      # No release keystore on CI: signingConfig stays unset, so this APK is
-      # unsigned and intended for sideload testing only.
+      # Decodes the release keystore only when the secret is configured. With no
+      # secret the build stays unsigned instead of failing, so forks still get
+      # an installable pre-release artifact.
+      - name: Decode release keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.TUNEPLAYER_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            mkdir -p keystore
+            printf '%s' "$KEYSTORE_BASE64" | base64 -d > keystore/release.keystore
+            echo "keystore decoded"
+          else
+            echo "no keystore secret; building unsigned"
+          fi
+
       - name: Build pre-release APK
+        env:
+          TUNEPLAYER_STORE_FILE: ${{ github.workspace }}/keystore/release.keystore
+          TUNEPLAYER_STORE_PASSWORD: ${{ secrets.TUNEPLAYER_STORE_PASSWORD }}
+          TUNEPLAYER_KEY_ALIAS: ${{ secrets.TUNEPLAYER_KEY_ALIAS }}
+          TUNEPLAYER_KEY_PASSWORD: ${{ secrets.TUNEPLAYER_KEY_PASSWORD }}
         run: ./gradlew :app:assembleRelease --stacktrace
 
       - name: Upload pre-release APK
@@ -123,7 +141,23 @@ jobs:
       - name: Grant execute permission
         run: chmod +x gradlew
 
+      - name: Decode release keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.TUNEPLAYER_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::error::TUNEPLAYER_KEYSTORE_BASE64 secret is required for a signed release"
+            exit 1
+          fi
+          mkdir -p keystore
+          printf '%s' "$KEYSTORE_BASE64" | base64 -d > keystore/release.keystore
+
       - name: Build release
+        env:
+          TUNEPLAYER_STORE_FILE: ${{ github.workspace }}/keystore/release.keystore
+          TUNEPLAYER_STORE_PASSWORD: ${{ secrets.TUNEPLAYER_STORE_PASSWORD }}
+          TUNEPLAYER_KEY_ALIAS: ${{ secrets.TUNEPLAYER_KEY_ALIAS }}
+          TUNEPLAYER_KEY_PASSWORD: ${{ secrets.TUNEPLAYER_KEY_PASSWORD }}
         run: ./gradlew :app:assembleRelease --stacktrace
 
       - name: Upload release APK

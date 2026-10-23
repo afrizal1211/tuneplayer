@@ -61,4 +61,12 @@
     <string name="shortcut_queue_long">再生キューを開く</string>
     <string name="shortcut_liked_short">お気に入り</string>
     <string name="shortcut_liked_long">お気に入りの曲を開く</string>
+    <string name="settings_diagnostics">診断</string>
+    <string name="logs_title">ログ</string>
+    <string name="logs_empty">ログはまだありません。</string>
+    <string name="logs_view">ログを表示</string>
+    <string name="logs_clear">消去</string>
+    <string name="logs_share">共有</string>
+    <string name="logs_close">閉じる</string>
+    <string name="logs_crash_installed">クラッシュ捕捉は有効です</string>
 </resources>

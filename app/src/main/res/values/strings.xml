@@ -61,4 +61,12 @@
     <string name="shortcut_queue_long">Open play queue</string>
     <string name="shortcut_liked_short">Liked</string>
     <string name="shortcut_liked_long">Open liked songs</string>
+    <string name="settings_diagnostics">Diagnostics</string>
+    <string name="logs_title">Logs</string>
+    <string name="logs_empty">No logs captured yet.</string>
+    <string name="logs_view">View logs</string>
+    <string name="logs_clear">Clear</string>
+    <string name="logs_share">Share</string>
+    <string name="logs_close">Close</string>
+    <string name="logs_crash_installed">Crash capture active</string>
 </resources>

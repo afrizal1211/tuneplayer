@@ -20,19 +20,32 @@ android {
     }
 
     signingConfigs {
-        // Release signing is opt-in: CI has no keystore, so the release variant
-        // stays unsigned there. Pass -PstoreFile=/path -PstorePassword=... to
-        // produce a signed release locally.
-        val storeFile = (project.findProperty("storeFile") as String?)
-            ?.takeIf { it.isNotBlank() }
-            ?.let(::file)
-            ?.takeIf { it.exists() }
+        // Release signing is opt-in and never checked in. Resolution order:
+        //   1. keystore.properties in the project root (gitignored)
+        //   2. TUNEPLAYER_* environment variables
+        //   3. -P gradle properties
+        // Without any of these the release variant stays unsigned, which is
+        // what CI uses for sideload-only pre-release builds.
+        val propsFile = rootProject.file("keystore.properties")
+        val props = if (propsFile.exists()) {
+            java.util.Properties().apply { propsFile.inputStream().use { load(it) } }
+        } else {
+            java.util.Properties()
+        }
+        fun secret(name: String, propName: String): String? =
+            (project.findProperty(propName) as String?)
+                ?: providers.environmentVariable(name).orNull
+                ?: props.getProperty(propName)
+                ?: props.getProperty(name)
+
+        val storePath = secret("TUNEPLAYER_STORE_FILE", "storeFile")
+        val storeFile = storePath?.let(::file)?.takeIf { it.exists() }
         if (storeFile != null) {
             create("release") {
                 this.storeFile = storeFile
-                storePassword = project.findProperty("storePassword") as String? ?: "tuneplayer123"
-                keyAlias = project.findProperty("keyAlias") as String? ?: "tuneplayer"
-                keyPassword = project.findProperty("keyPassword") as String? ?: "tuneplayer123"
+                storePassword = secret("TUNEPLAYER_STORE_PASSWORD", "storePassword")
+                keyAlias = secret("TUNEPLAYER_KEY_ALIAS", "keyAlias")
+                keyPassword = secret("TUNEPLAYER_KEY_PASSWORD", "keyPassword")
             }
         }
     }

@@ -76,6 +76,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -304,6 +305,9 @@ fun TunePlayerScreen(
                 isFavorite = state.currentTrack?.let { it.id in state.favoriteIds } == true,
                 syncedLyrics = state.syncedLyrics,
                 activeLyricIndex = state.activeLyricIndex,
+                positionMs = state.positionMs,
+                durationMs = state.durationMs,
+                onSeek = viewModel::seekTo,
                 onTogglePlayPause = viewModel::togglePlayPause,
                 onToggleShuffle = viewModel::toggleShuffle,
                 onCycleRepeat = viewModel::cycleRepeatMode,
@@ -950,6 +954,9 @@ private fun LyricsSheet(
     isFavorite: Boolean,
     syncedLyrics: List<LrcParser.LrcLine>,
     activeLyricIndex: Int,
+    positionMs: Long,
+    durationMs: Long,
+    onSeek: (Long) -> Unit,
     onTogglePlayPause: () -> Unit,
     onToggleShuffle: () -> Unit,
     onCycleRepeat: () -> Unit,
@@ -985,6 +992,11 @@ private fun LyricsSheet(
                 overflow = TextOverflow.Ellipsis,
             )
             Spacer(Modifier.height(16.dp))
+            SeekBarRow(
+                positionMs = positionMs,
+                durationMs = durationMs,
+                onSeek = onSeek,
+            )
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onToggleShuffle) {
                     Icon(
@@ -998,8 +1010,7 @@ private fun LyricsSheet(
                         imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                         contentDescription = stringResource(if (isPlaying) R.string.action_pause else R.string.action_play),
                     )
-                }
-                IconButton(onClick = onCycleRepeat) {
+                }                IconButton(onClick = onCycleRepeat) {
                     Icon(
                         imageVector = when (repeatMode) {
                             Player.REPEAT_MODE_ONE -> Icons.Default.RepeatOne
@@ -1048,8 +1059,54 @@ private fun LyricsSheet(
     }
 }
 
-/** Highlights the line for the current playback position and keeps it in view. */
+/**
+ * Seek bar with elapsed / total labels.
+ *
+ * While dragging, [Slider] owns the value so the thumb does not jump back
+ * under the 250 ms position poll.
+ */
 @Composable
+private fun SeekBarRow(
+    positionMs: Long,
+    durationMs: Long,
+    onSeek: (Long) -> Unit,
+) {
+    var dragging by remember { mutableStateOf(false) }
+    var dragValue by remember { mutableFloatStateOf(0f) }
+    val max = durationMs.coerceAtLeast(1L).toFloat()
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Slider(
+            value = if (dragging) dragValue else positionMs.coerceIn(0L, durationMs).toFloat(),
+            onValueChange = {
+                dragging = true
+                dragValue = it
+            },
+            onValueChangeFinished = {
+                onSeek(dragValue.toLong())
+                dragging = false
+            },
+            valueRange = 0f..max,
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(
+                text = formatDuration(if (dragging) dragValue.toLong() else positionMs),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = formatDuration(durationMs),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+/** Highlights the line for the current playback position and keeps it in view. */@Composable
 private fun SyncedLyrics(
     lines: List<LrcParser.LrcLine>,
     activeIndex: Int,

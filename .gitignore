@@ -8,3 +8,4 @@ app/release/
 app/debug/
 *.jks
 *.keystore
+keystore.properties
