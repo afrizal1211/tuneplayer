@@ -125,4 +125,20 @@
     <string name="backup_imported">Imported %1$d settings keys. Restart to apply everything.</string>
     <string name="backup_failed">Backup failed: %1$s</string>
     <string name="backup_export_title">tuneplayer-backup.json</string>
+    <string name="action_search">Search</string>
+    <string name="action_clear_filter">Clear filter</string>
+    <string name="action_unfavorite">Remove from favorites</string>
+    <string name="action_favorite_add">Add to favorites</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="state_selected">Selected</string>
+    <string name="state_active">Active</string>
+    <string name="sleep_minutes">%1$d min</string>
+    <string name="queue_title_count">Queue (%1$d)</string>
+    <string name="queue_total_duration">Total %1$s</string>
+    <string name="queue_clear_confirm">Remove all tracks from the queue?</string>
+    <string name="library_empty_hint">Songs appear here once your library loads.</string>
+    <string name="action_skip_next">Next</string>
+    <string name="action_skip_previous">Previous</string>
+    <string name="action_lyrics">Lyrics</string>
+    <string name="library_refresh">Rescan library</string>
 </resources>

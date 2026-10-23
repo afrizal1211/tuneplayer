@@ -125,4 +125,20 @@
     <string name="backup_imported">%1$d件の設定を読み込みました。すべて反映するには再起動してください。</string>
     <string name="backup_failed">バックアップに失敗しました: %1$s</string>
     <string name="backup_export_title">tuneplayer-backup.json</string>
+    <string name="action_search">検索</string>
+    <string name="action_clear_filter">フィルターを解除</string>
+    <string name="action_unfavorite">お気に入りから削除</string>
+    <string name="action_favorite_add">お気に入りに追加</string>
+    <string name="action_cancel">キャンセル</string>
+    <string name="state_selected">選択中</string>
+    <string name="state_active">有効</string>
+    <string name="sleep_minutes">%1$d分</string>
+    <string name="queue_title_count">キュー (%1$d)</string>
+    <string name="queue_total_duration">合計 %1$s</string>
+    <string name="queue_clear_confirm">キューからすべての曲を削除しますか？</string>
+    <string name="library_empty_hint">ライブラリを読み込むと曲が表示されます。</string>
+    <string name="action_skip_next">次へ</string>
+    <string name="action_skip_previous">前へ</string>
+    <string name="action_lyrics">歌詞</string>
+    <string name="library_refresh">ライブラリを再読み込み</string>
 </resources>

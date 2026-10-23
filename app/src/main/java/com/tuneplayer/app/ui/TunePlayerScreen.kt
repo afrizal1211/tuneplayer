@@ -5,6 +5,8 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -47,6 +49,9 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.MoreHoriz
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Subtitles
 import androidx.compose.material.icons.filled.PlaylistPlay
 import androidx.compose.material.icons.filled.RemoveCircleOutline
 import androidx.compose.material.icons.filled.Search
@@ -71,10 +76,12 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.NavigationBar
@@ -105,6 +112,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -158,6 +166,8 @@ fun TunePlayerScreen(
     var showSleepDialog by rememberSaveable { mutableStateOf(false) }
     var showLyricsSheet by rememberSaveable { mutableStateOf(false) }
     var showMore by rememberSaveable { mutableStateOf(false) }
+    var showPlayer by rememberSaveable { mutableStateOf(false) }
+    var speedMenuOpen by remember { mutableStateOf(false) }
 
     // Tabs: 0 Library, 1 YouTube, 2 Queue, 3 Liked, 4 History, 5 Playlists, 6 Settings
     val keepScreenOn = state.keepScreenOn
@@ -177,8 +187,18 @@ fun TunePlayerScreen(
         topBar = {
             TopAppBar(
                 title = {
+                    val tabTitle = when (selectedTab) {
+                        0 -> R.string.tab_library
+                        1 -> R.string.tab_youtube
+                        2 -> R.string.tab_queue
+                        3 -> R.string.tab_liked
+                        4 -> R.string.tab_history
+                        5 -> R.string.tab_playlists
+                        6 -> R.string.tab_settings
+                        else -> R.string.tab_stats
+                    }
                     Text(
-                        text = stringResource(R.string.app_name),
+                        text = stringResource(tabTitle),
                         fontWeight = FontWeight.SemiBold,
                     )
                 },
@@ -186,7 +206,7 @@ fun TunePlayerScreen(
                     IconButton(onClick = { showSleepDialog = true }) {
                         Icon(
                             imageVector = Icons.Default.Timer,
-                            contentDescription = "Sleep timer",
+                            contentDescription = stringResource(R.string.sleep_timer),
                             tint = if (state.isSleepTimerActive) {
                                 MaterialTheme.colorScheme.primary
                             } else {
@@ -194,11 +214,32 @@ fun TunePlayerScreen(
                             },
                         )
                     }
-                    IconButton(onClick = viewModel::cyclePlaybackSpeed) {
-                        Text(
-                            text = "%.2gx".format(state.playbackSpeed),
-                            style = MaterialTheme.typography.labelLarge,
-                        )
+                    Box {
+                        TextButton(onClick = { speedMenuOpen = true }) {
+                            Text(
+                                text = formatSpeed(state.playbackSpeed),
+                                style = MaterialTheme.typography.labelLarge,
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = speedMenuOpen,
+                            onDismissRequest = { speedMenuOpen = false },
+                        ) {
+                            PLAYBACK_SPEEDS.forEach { speed ->
+                                DropdownMenuItem(
+                                    text = { Text(formatSpeed(speed)) },
+                                    onClick = {
+                                        viewModel.setPlaybackSpeed(speed)
+                                        speedMenuOpen = false
+                                    },
+                                    trailingIcon = {
+                                        if (kotlin.math.abs(state.playbackSpeed - speed) < 0.01f) {
+                                            Icon(Icons.Default.Check, contentDescription = null)
+                                        }
+                                    },
+                                )
+                            }
+                        }
                     }
                 },
             )
@@ -209,11 +250,11 @@ fun TunePlayerScreen(
                     MiniPlayer(
                         track = track,
                         isPlaying = state.isPlaying,
+                        positionMs = state.positionMs,
+                        durationMs = state.durationMs,
                         onTogglePlayPause = viewModel::togglePlayPause,
-                        onOpenLyrics = {
-                            viewModel.loadLyrics()
-                            showLyricsSheet = true
-                        },
+                        onSkipNext = viewModel::skipToNext,
+                        onOpenPlayer = { showPlayer = true },
                     )
                 }
                 NavigationBar {
@@ -257,15 +298,41 @@ fun TunePlayerScreen(
                 .padding(innerPadding),
         ) {
             state.error?.let { error ->
-                Text(
-                    text = error,
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                )
+                Surface(
+                    color = MaterialTheme.colorScheme.errorContainer,
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 4.dp),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(start = 12.dp, end = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = error,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.weight(1f),
+                        )
+                        IconButton(onClick = viewModel::clearError) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = stringResource(R.string.action_close),
+                                tint = MaterialTheme.colorScheme.onErrorContainer,
+                            )
+                        }
+                    }
+                }
             }
 
-            when (selectedTab) {
+            Crossfade(
+                targetState = selectedTab,
+                animationSpec = tween(180),
+                modifier = Modifier.weight(1f),
+                label = "tab-content",
+            ) { tab ->
+                when (tab) {
                 0 -> LibraryScreen(
                     tracks = viewModel.visibleLocalTracks,
                     favoriteIds = state.favoriteIds,
@@ -280,6 +347,7 @@ fun TunePlayerScreen(
                     onSortChange = viewModel::setLibrarySort,
                     onToggleSortDirection = viewModel::toggleLibrarySortDirection,
                     onToggleLayout = viewModel::toggleGridLayout,
+                    onRefresh = viewModel::loadLocalMusic,
                     onShuffleAll = viewModel::shuffleAll,
                     onPlayAll = viewModel::playAll,
                     onPlay = viewModel::play,
@@ -312,15 +380,20 @@ fun TunePlayerScreen(
                     onClear = viewModel::clearQueue,
                 )
 
-                3 -> FavoritesScreen(
-                    tracks = state.localTracks.filter { it.id in state.favoriteIds } +
-                        state.searchResults.filter { it.id in state.favoriteIds },
-                    favoriteIds = state.favoriteIds,
-                    onPlay = viewModel::play,
-                    onPlayNext = viewModel::playNext,
-                    onToggleFavorite = viewModel::toggleFavorite,
-                    onShare = { track -> shareTrack(context, track) },
-                )
+                3 -> {
+                    val favoriteTracks = state.localTracks.filter { it.id in state.favoriteIds } +
+                        state.searchResults.filter { it.id in state.favoriteIds }
+                    FavoritesScreen(
+                        tracks = favoriteTracks,
+                        favoriteIds = state.favoriteIds,
+                        onPlay = viewModel::play,
+                        onPlayNext = viewModel::playNext,
+                        onToggleFavorite = viewModel::toggleFavorite,
+                        onShare = { track -> shareTrack(context, track) },
+                        onPlayAll = { viewModel.playTracks(favoriteTracks) },
+                        onShuffleAll = { viewModel.shuffleTracks(favoriteTracks) },
+                    )
+                }
 
                 4 -> HistoryScreen(
                     tracks = state.historyTracks,
@@ -329,6 +402,8 @@ fun TunePlayerScreen(
                     onPlayNext = viewModel::playNext,
                     onToggleFavorite = viewModel::toggleFavorite,
                     onShare = { track -> shareTrack(context, track) },
+                    onPlayAll = { viewModel.playTracks(state.historyTracks) },
+                    onShuffleAll = { viewModel.shuffleTracks(state.historyTracks) },
                 )
 
                 5 -> PlaylistsScreen(
@@ -380,6 +455,7 @@ fun TunePlayerScreen(
                     onToggleFavorite = viewModel::toggleFavorite,
                     onShare = { track -> shareTrack(context, track) },
                 )
+                }
             }
         }
         if (showMore) {
@@ -413,6 +489,32 @@ fun TunePlayerScreen(
                     showMore = false
                 }
             }
+        }
+        val playingTrack = state.currentTrack
+        if (showPlayer && playingTrack != null) {
+            NowPlayingSheet(
+                track = playingTrack,
+                isPlaying = state.isPlaying,
+                isShuffleEnabled = state.isShuffleEnabled,
+                repeatMode = state.repeatMode,
+                isFavorite = playingTrack.id in state.favoriteIds,
+                positionMs = state.positionMs,
+                durationMs = state.durationMs,
+                onSeek = viewModel::seekTo,
+                onTogglePlayPause = viewModel::togglePlayPause,
+                onSkipNext = viewModel::skipToNext,
+                onSkipPrevious = viewModel::skipToPrevious,
+                onToggleShuffle = viewModel::toggleShuffle,
+                onCycleRepeat = viewModel::cycleRepeatMode,
+                onToggleFavorite = viewModel::toggleFavorite,
+                onShare = { track -> shareTrack(context, track) },
+                onOpenLyrics = {
+                    viewModel.loadLyrics()
+                    showPlayer = false
+                    showLyricsSheet = true
+                },
+                onDismiss = { showPlayer = false },
+            )
         }
         if (showLyricsSheet) {
             LyricsSheet(
@@ -474,6 +576,7 @@ private fun LibraryScreen(
     onSortChange: (LibrarySort) -> Unit,
     onToggleSortDirection: () -> Unit,
     onToggleLayout: () -> Unit,
+    onRefresh: () -> Unit,
     onShuffleAll: () -> Unit,
     onPlayAll: () -> Unit,
     onPlay: (Track) -> Unit,
@@ -497,7 +600,7 @@ private fun LibraryScreen(
         return
     }
 
-    if (isLoading) {
+    if (isLoading && tracks.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             CircularProgressIndicator()
         }
@@ -516,6 +619,8 @@ private fun LibraryScreen(
             onSortChange = onSortChange,
             onToggleSortDirection = onToggleSortDirection,
             onToggleLayout = onToggleLayout,
+            isLoading = isLoading,
+            onRefresh = onRefresh,
         )
         Row(
             modifier = Modifier
@@ -550,7 +655,24 @@ private fun LibraryScreen(
         }
         if (tracks.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(stringResource(R.string.library_empty))
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(
+                        imageVector = Icons.Default.LibraryMusic,
+                        contentDescription = null,
+                        modifier = Modifier.size(48.dp),
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    Text(
+                        text = stringResource(R.string.library_empty),
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = stringResource(R.string.library_empty_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
             return
         }
@@ -672,6 +794,8 @@ private fun LibraryFilterBar(
     onSortChange: (LibrarySort) -> Unit,
     onToggleSortDirection: () -> Unit,
     onToggleLayout: () -> Unit,
+    isLoading: Boolean,
+    onRefresh: () -> Unit,
 ) {
     var sortMenuOpen by remember { mutableStateOf(false) }
 
@@ -690,7 +814,7 @@ private fun LibraryFilterBar(
             trailingIcon = {
                 if (query.isNotEmpty()) {
                     IconButton(onClick = { onQueryChange("") }) {
-                        Icon(Icons.Default.Close, contentDescription = "Clear filter")
+                        Icon(Icons.Default.Close, contentDescription = stringResource(R.string.action_clear_filter))
                     }
                 }
             },
@@ -700,6 +824,16 @@ private fun LibraryFilterBar(
                 Icons.Default.GridView,
                 contentDescription = stringResource(R.string.action_toggle_layout),
             )
+        }
+        IconButton(onClick = onRefresh, enabled = !isLoading) {
+            if (isLoading) {
+                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+            } else {
+                Icon(
+                    Icons.Default.Refresh,
+                    contentDescription = stringResource(R.string.library_refresh),
+                )
+            }
         }
         Box {
             IconButton(onClick = { sortMenuOpen = true }) {
@@ -761,6 +895,8 @@ private fun FavoritesScreen(
     onPlayNext: (Track) -> Unit,
     onToggleFavorite: (Track) -> Unit,
     onShare: (Track) -> Unit,
+    onPlayAll: () -> Unit,
+    onShuffleAll: () -> Unit,
 ) {
     if (tracks.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -782,14 +918,44 @@ private fun FavoritesScreen(
         }
         return
     }
-    TrackList(
-        tracks = tracks,
-        favoriteIds = favoriteIds,
-        onPlay = onPlay,
-        onPlayNext = onPlayNext,
-        onToggleFavorite = onToggleFavorite,
-        onShare = onShare,
-    )
+    Column(modifier = Modifier.fillMaxSize()) {
+        BulkActionRow(onPlayAll = onPlayAll, onShuffleAll = onShuffleAll)
+        Box(modifier = Modifier.weight(1f)) {
+            TrackList(
+                tracks = tracks,
+                favoriteIds = favoriteIds,
+                onPlay = onPlay,
+                onPlayNext = onPlayNext,
+                onToggleFavorite = onToggleFavorite,
+                onShare = onShare,
+            )
+        }
+    }
+}
+
+/** Small play/shuffle pair used above list screens that have no toolbar. */
+@Composable
+private fun BulkActionRow(
+    onPlayAll: () -> Unit,
+    onShuffleAll: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        AssistChip(
+            onClick = onShuffleAll,
+            label = { Text(stringResource(R.string.action_shuffle_all)) },
+            leadingIcon = { Icon(Icons.Default.Shuffle, contentDescription = null) },
+        )
+        AssistChip(
+            onClick = onPlayAll,
+            label = { Text(stringResource(R.string.action_play_all)) },
+            leadingIcon = { Icon(Icons.Default.PlayArrow, contentDescription = null) },
+        )
+    }
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -819,7 +985,7 @@ private fun YouTubeScreen(
             singleLine = true,
             trailingIcon = {
                 IconButton(onClick = onSearch) {
-                    Icon(Icons.Default.Search, contentDescription = "Search")
+                    Icon(Icons.Default.Search, contentDescription = stringResource(R.string.action_search))
                 }
             },
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
@@ -1015,7 +1181,9 @@ private fun TrackRow(
         IconButton(onClick = onToggleFavorite) {
             Icon(
                 imageVector = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                contentDescription = if (isFavorite) "Remove from favorites" else "Add to favorites",
+                contentDescription = stringResource(
+                    if (isFavorite) R.string.action_unfavorite else R.string.action_favorite_add,
+                ),
                 tint = if (isFavorite) {
                     MaterialTheme.colorScheme.error
                 } else {
@@ -1057,45 +1225,81 @@ private fun Artwork(track: Track, size: Int) {
 private fun MiniPlayer(
     track: Track,
     isPlaying: Boolean,
+    positionMs: Long,
+    durationMs: Long,
     onTogglePlayPause: () -> Unit,
-    onOpenLyrics: () -> Unit,
+    onSkipNext: () -> Unit,
+    onOpenPlayer: () -> Unit,
 ) {
+    val progress = if (durationMs > 0L) {
+        (positionMs.toFloat() / durationMs).coerceIn(0f, 1f)
+    } else {
+        0f
+    }
     Surface(tonalElevation = 3.dp) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Artwork(track = track, size = 44)
-            Spacer(Modifier.width(12.dp))
-            Column(
+        Column {
+            LinearProgressIndicator(
+                progress = { progress },
                 modifier = Modifier
-                    .weight(1f)
-                    .clickable(onClick = onOpenLyrics),
+                    .fillMaxWidth()
+                    .height(3.dp),
+                color = MaterialTheme.colorScheme.primary,
+                trackColor = MaterialTheme.colorScheme.surfaceVariant,
+            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
-                    text = track.title,
-                    style = MaterialTheme.typography.bodyMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    text = track.artist,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            IconButton(onClick = onTogglePlayPause) {
-                Icon(
-                    imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                    contentDescription = stringResource(if (isPlaying) R.string.action_pause else R.string.action_play),
-                )
+                Box(modifier = Modifier.clickable(onClick = onOpenPlayer)) {
+                    Artwork(track = track, size = 44)
+                }
+                Spacer(Modifier.width(12.dp))
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable(onClick = onOpenPlayer),
+                ) {
+                    Text(
+                        text = track.title,
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = track.artist,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                IconButton(onClick = onTogglePlayPause) {
+                    Icon(
+                        imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                        contentDescription = stringResource(if (isPlaying) R.string.action_pause else R.string.action_play),
+                    )
+                }
+                IconButton(onClick = onSkipNext) {
+                    Icon(
+                        imageVector = Icons.Default.SkipNext,
+                        contentDescription = stringResource(R.string.action_skip_next),
+                    )
+                }
             }
         }
     }
+}
+
+/** 1x, 1.25x, 1.5x: no trailing zeros, no rounding surprises. */
+private fun formatSpeed(speed: Float): String {
+    val number = if (speed == speed.toInt().toFloat()) {
+        "%.0f".format(speed)
+    } else {
+        "%.2f".format(speed)
+    }
+    return "${number}x"
 }
 
 private fun formatDuration(durationMs: Long): String {
@@ -1138,11 +1342,11 @@ private fun SleepTimerDialog(
                             .padding(vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text("$minutes min", style = MaterialTheme.typography.bodyLarge)
+                        Text(stringResource(R.string.sleep_minutes, minutes), style = MaterialTheme.typography.bodyLarge)
                         Spacer(Modifier.weight(1f))
                         if (isActive && currentMinutes == minutes) {
                             Text(
-                                text = "Active",
+                                text = stringResource(R.string.state_active),
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.primary,
                             )
@@ -1164,7 +1368,7 @@ private fun SleepTimerDialog(
                     Spacer(Modifier.weight(1f))
                     if (finishTrackArmed) {
                         Text(
-                            text = "Active",
+                            text = stringResource(R.string.state_active),
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.primary,
                         )
@@ -1192,6 +1396,8 @@ private fun SleepTimerDialog(
 
 private val SLEEP_MINUTE_OPTIONS = listOf(5, 10, 15, 30, 45, 60, 90)
 
+private val PLAYBACK_SPEEDS = listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f)
+
 @Composable
 private fun QueueScreen(
     queue: List<Track>,
@@ -1201,56 +1407,97 @@ private fun QueueScreen(
     onMove: (Int, Int) -> Unit,
     onClear: () -> Unit,
 ) {
-    Column(modifier = Modifier.fillMaxSize()) {
-        if (queue.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(Icons.Default.LibraryMusic, contentDescription = null, modifier = Modifier.size(48.dp))
-                    Spacer(Modifier.height(16.dp))
-                    Text(stringResource(R.string.queue_empty), style = MaterialTheme.typography.bodyLarge)
-                    Spacer(Modifier.height(8.dp))
-                    Text(stringResource(R.string.queue_empty_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-        } else {
-            Column(
-                modifier = Modifier.fillMaxSize(),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        text = "Queue (${queue.size})",
-                        style = MaterialTheme.typography.titleMedium,
-                    )
-                    TextButton(onClick = onClear) {
-                        Icon(Icons.Default.Delete, contentDescription = null)
-                        Spacer(Modifier.width(4.dp))
-                        Text(stringResource(R.string.action_clear))
-                    }
-                }
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(bottom = 12.dp),
-                ) {
-                    itemsIndexed(items = queue, key = { _, track -> track.id }) { index, track ->
-                        QueueRow(
-                            track = track,
-                            isPlaying = index == currentIndex,
-                            onPlay = { onPlay(index) },
-                            onRemove = { onRemove(index) },
-                            onMoveUp = { if (index > 0) onMove(index, index - 1) },
-                            onMoveDown = { if (index < queue.lastIndex) onMove(index, index + 1) },
-                        )
-                        HorizontalDivider(modifier = Modifier.padding(start = 72.dp))
-                    }
-                }
+    var confirmClear by remember { mutableStateOf(false) }
+
+    if (queue.isEmpty()) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Icon(
+                    Icons.Default.LibraryMusic,
+                    contentDescription = null,
+                    modifier = Modifier.size(48.dp),
+                )
+                Spacer(Modifier.height(16.dp))
+                Text(stringResource(R.string.queue_empty), style = MaterialTheme.typography.bodyLarge)
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    stringResource(R.string.queue_empty_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
+        return
+    }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        val totalMs = queue.sumOf { it.durationMs }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.queue_title_count, queue.size),
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                if (totalMs > 0L) {
+                    Text(
+                        text = stringResource(R.string.queue_total_duration, formatDuration(totalMs)),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            TextButton(onClick = { confirmClear = true }) {
+                Icon(Icons.Default.Delete, contentDescription = null)
+                Spacer(Modifier.width(4.dp))
+                Text(stringResource(R.string.action_clear))
+            }
+        }
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(bottom = 12.dp),
+        ) {
+            itemsIndexed(items = queue, key = { _, track -> track.id }) { index, track ->
+                QueueRow(
+                    track = track,
+                    isPlaying = index == currentIndex,
+                    canMoveUp = index > 0,
+                    canMoveDown = index < queue.lastIndex,
+                    onPlay = { onPlay(index) },
+                    onRemove = { onRemove(index) },
+                    onMoveUp = { onMove(index, index - 1) },
+                    onMoveDown = { onMove(index, index + 1) },
+                )
+                HorizontalDivider(modifier = Modifier.padding(start = 72.dp))
+            }
+        }
+    }
+
+    if (confirmClear) {
+        AlertDialog(
+            onDismissRequest = { confirmClear = false },
+            title = { Text(stringResource(R.string.action_clear)) },
+            text = { Text(stringResource(R.string.queue_clear_confirm)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirmClear = false
+                        onClear()
+                    },
+                ) {
+                    Text(stringResource(R.string.action_clear))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmClear = false }) {
+                    Text(stringResource(R.string.action_cancel))
+                }
+            },
+        )
     }
 }
 
@@ -1258,23 +1505,33 @@ private fun QueueScreen(
 private fun QueueRow(
     track: Track,
     isPlaying: Boolean,
+    canMoveUp: Boolean,
+    canMoveDown: Boolean,
     onPlay: () -> Unit,
     onRemove: () -> Unit,
     onMoveUp: () -> Unit,
     onMoveDown: () -> Unit,
 ) {
+    var menuOpen by remember { mutableStateOf(false) }
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .background(
+                if (isPlaying) {
+                    MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
+                } else {
+                    Color.Transparent
+                },
+            )
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Artwork(track = track, size = 48)
         Spacer(Modifier.width(12.dp))
-        Column(modifier = Modifier
-            .weight(1f)
-            .fillMaxWidth()
-            .clickable(onClick = onPlay)
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .clickable(onClick = onPlay),
         ) {
             Text(
                 text = track.title,
@@ -1302,18 +1559,44 @@ private fun QueueRow(
                 contentDescription = stringResource(R.string.now_playing),
                 tint = MaterialTheme.colorScheme.primary,
             )
-            Spacer(Modifier.width(12.dp))
+            Spacer(Modifier.width(8.dp))
         }
-        Column {
-            IconButton(onClick = onMoveUp) {
-                Icon(Icons.Default.KeyboardArrowUp, contentDescription = stringResource(R.string.action_move_up))
+        Box {
+            IconButton(onClick = { menuOpen = true }) {
+                Icon(
+                    imageVector = Icons.Default.MoreVert,
+                    contentDescription = stringResource(R.string.tab_more),
+                )
             }
-            IconButton(onClick = onMoveDown) {
-                Icon(Icons.Default.KeyboardArrowDown, contentDescription = stringResource(R.string.action_move_down))
+            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.action_move_up)) },
+                    enabled = canMoveUp,
+                    onClick = {
+                        menuOpen = false
+                        onMoveUp()
+                    },
+                    leadingIcon = { Icon(Icons.Default.KeyboardArrowUp, contentDescription = null) },
+                )
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.action_move_down)) },
+                    enabled = canMoveDown,
+                    onClick = {
+                        menuOpen = false
+                        onMoveDown()
+                    },
+                    leadingIcon = { Icon(Icons.Default.KeyboardArrowDown, contentDescription = null) },
+                )
+                HorizontalDivider()
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.action_remove)) },
+                    onClick = {
+                        menuOpen = false
+                        onRemove()
+                    },
+                    leadingIcon = { Icon(Icons.Default.Close, contentDescription = null) },
+                )
             }
-        }
-        IconButton(onClick = onRemove) {
-            Icon(Icons.Default.Close, contentDescription = stringResource(R.string.action_remove))
         }
     }
 }
@@ -1337,6 +1620,157 @@ private fun shareTrack(context: android.content.Context, track: Track) {
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun NowPlayingSheet(
+    track: Track,
+    isPlaying: Boolean,
+    isShuffleEnabled: Boolean,
+    repeatMode: Int,
+    isFavorite: Boolean,
+    positionMs: Long,
+    durationMs: Long,
+    onSeek: (Long) -> Unit,
+    onTogglePlayPause: () -> Unit,
+    onSkipNext: () -> Unit,
+    onSkipPrevious: () -> Unit,
+    onToggleShuffle: () -> Unit,
+    onCycleRepeat: () -> Unit,
+    onToggleFavorite: (Track) -> Unit,
+    onShare: (Track) -> Unit,
+    onOpenLyrics: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Artwork(track = track, size = 240)
+            Spacer(Modifier.height(20.dp))
+            Text(
+                text = track.title,
+                style = MaterialTheme.typography.titleLarge,
+                textAlign = TextAlign.Center,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = track.artist,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.height(20.dp))
+            SeekBarRow(
+                positionMs = positionMs,
+                durationMs = durationMs,
+                onSeek = onSeek,
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                IconButton(onClick = onToggleShuffle) {
+                    Icon(
+                        imageVector = Icons.Default.Shuffle,
+                        contentDescription = stringResource(R.string.action_shuffle),
+                        tint = if (isShuffleEnabled) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                    )
+                }
+                IconButton(
+                    onClick = onSkipPrevious,
+                    modifier = Modifier.size(48.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.SkipPrevious,
+                        contentDescription = stringResource(R.string.action_skip_previous),
+                        modifier = Modifier.size(32.dp),
+                    )
+                }
+                FilledIconButton(
+                    onClick = onTogglePlayPause,
+                    modifier = Modifier.size(64.dp),
+                ) {
+                    Icon(
+                        imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                        contentDescription = stringResource(if (isPlaying) R.string.action_pause else R.string.action_play),
+                        modifier = Modifier.size(36.dp),
+                    )
+                }
+                IconButton(
+                    onClick = onSkipNext,
+                    modifier = Modifier.size(48.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.SkipNext,
+                        contentDescription = stringResource(R.string.action_skip_next),
+                        modifier = Modifier.size(32.dp),
+                    )
+                }
+                IconButton(onClick = onCycleRepeat) {
+                    Icon(
+                        imageVector = if (repeatMode == Player.REPEAT_MODE_ONE) {
+                            Icons.Default.RepeatOne
+                        } else {
+                            Icons.Default.Repeat
+                        },
+                        contentDescription = stringResource(R.string.action_repeat),
+                        tint = if (repeatMode != Player.REPEAT_MODE_OFF) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                    )
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                IconButton(onClick = { onToggleFavorite(track) }) {
+                    Icon(
+                        imageVector = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                        contentDescription = stringResource(
+                            if (isFavorite) R.string.action_unfavorite else R.string.action_favorite_add,
+                        ),
+                        tint = if (isFavorite) {
+                            MaterialTheme.colorScheme.error
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                    )
+                }
+                IconButton(onClick = onOpenLyrics) {
+                    Icon(
+                        imageVector = Icons.Default.Subtitles,
+                        contentDescription = stringResource(R.string.action_lyrics),
+                    )
+                }
+                IconButton(onClick = { onShare(track) }) {
+                    Icon(
+                        imageVector = Icons.Default.Share,
+                        contentDescription = stringResource(R.string.action_share),
+                    )
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun LyricsSheet(
     track: Track?,
@@ -1551,6 +1985,8 @@ private fun HistoryScreen(
     onPlayNext: (Track) -> Unit,
     onToggleFavorite: (Track) -> Unit,
     onShare: (Track) -> Unit,
+    onPlayAll: () -> Unit,
+    onShuffleAll: () -> Unit,
 ) {
     if (tracks.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -1572,14 +2008,19 @@ private fun HistoryScreen(
         }
         return
     }
-    TrackList(
-        tracks = tracks,
-        favoriteIds = favoriteIds,
-        onPlay = onPlay,
-        onPlayNext = onPlayNext,
-        onToggleFavorite = onToggleFavorite,
-        onShare = onShare,
-    )
+    Column(modifier = Modifier.fillMaxSize()) {
+        BulkActionRow(onPlayAll = onPlayAll, onShuffleAll = onShuffleAll)
+        Box(modifier = Modifier.weight(1f)) {
+            TrackList(
+                tracks = tracks,
+                favoriteIds = favoriteIds,
+                onPlay = onPlay,
+                onPlayNext = onPlayNext,
+                onToggleFavorite = onToggleFavorite,
+                onShare = onShare,
+            )
+        }
+    }
 }
 
 @Composable

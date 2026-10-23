@@ -122,7 +122,7 @@ fun SettingsScreen(
                 if (theme == option) {
                     Icon(
                         imageVector = Icons.Default.Check,
-                        contentDescription = "Selected",
+                        contentDescription = stringResource(R.string.state_selected),
                         tint = MaterialTheme.colorScheme.primary,
                     )
                 }

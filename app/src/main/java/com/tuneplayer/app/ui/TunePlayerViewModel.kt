@@ -414,6 +414,27 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
+    fun skipToNext() {
+        controller?.seekToNext()
+    }
+
+    /** Restarts the track when past the platform's previous threshold, else goes back. */
+    fun skipToPrevious() {
+        controller?.seekToPrevious()
+    }
+
+    fun clearError() {
+        uiState = uiState.copy(error = null)
+    }
+
+    /** Sets an exact speed; the menu offers musical steps, the API clamps the rest. */
+    fun setPlaybackSpeed(speed: Float) {
+        val player = controller ?: return
+        val clamped = speed.coerceIn(0.25f, 3.0f)
+        player.setPlaybackSpeed(clamped)
+        uiState = uiState.copy(playbackSpeed = clamped)
+    }
+
     fun togglePlayPause() {
         val player = controller ?: return
         if (player.isPlaying) {
@@ -504,27 +525,29 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
 
     // ---- Library bulk actions ----
 
-    /** Replaces the queue with every local track in shuffled order and plays. */
-    fun shuffleAll() {
-        val tracks = visibleLocalTracks
-        if (tracks.isEmpty()) return
-        val shuffled = tracks.shuffled()
-        uiState = uiState.copy(playbackQueue = shuffled, queueIndex = 0)
-        pushQueueToPlayer(shuffled, 0)
-        val first = shuffled.first()
-        viewModelScope.launch { startTrack(first) }
-        LogCatcher.d(TAG, "shuffleAll: ${shuffled.size} tracks")
-    }
-
-    /** Replaces the queue with every local track in sort order and plays. */
-    fun playAll() {
-        val tracks = visibleLocalTracks
+    /** Replaces the queue with [tracks] in order and starts the first one. */
+    fun playTracks(tracks: List<Track>) {
         if (tracks.isEmpty()) return
         uiState = uiState.copy(playbackQueue = tracks, queueIndex = 0)
         pushQueueToPlayer(tracks, 0)
-        val first = tracks.first()
-        viewModelScope.launch { startTrack(first) }
-        LogCatcher.d(TAG, "playAll: ${tracks.size} tracks")
+        viewModelScope.launch { startTrack(tracks.first()) }
+        LogCatcher.d(TAG, "playTracks: ${tracks.size} tracks")
+    }
+
+    /** Same as [playTracks] but shuffled, for list-level shuffle actions. */
+    fun shuffleTracks(tracks: List<Track>) {
+        if (tracks.isEmpty()) return
+        playTracks(tracks.shuffled())
+    }
+
+    /** Replaces the queue with every visible local track in shuffled order and plays. */
+    fun shuffleAll() {
+        shuffleTracks(visibleLocalTracks)
+    }
+
+    /** Replaces the queue with every visible local track in sort order and plays. */
+    fun playAll() {
+        playTracks(visibleLocalTracks)
     }
 
     // ---- Playlists ----
