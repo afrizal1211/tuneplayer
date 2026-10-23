@@ -1,3 +1,4 @@
+import java.util.Properties
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
@@ -27,10 +28,9 @@ android {
         // Without any of these the release variant stays unsigned, which is
         // what CI uses for sideload-only pre-release builds.
         val propsFile = rootProject.file("keystore.properties")
-        val props = if (propsFile.exists()) {
-            java.util.Properties().apply { propsFile.inputStream().use { load(it) } }
-        } else {
-            java.util.Properties()
+        val props = Properties()
+        if (propsFile.exists()) {
+            propsFile.inputStream().use { props.load(it) }
         }
         fun secret(name: String, propName: String): String? =
             (project.findProperty(propName) as String?)
