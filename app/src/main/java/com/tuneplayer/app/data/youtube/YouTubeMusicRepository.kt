@@ -11,12 +11,15 @@ import com.metrolist.innertubex.extraction.YtConfigParserImpl
 import com.metrolist.innertubex.models.MusicResponsiveListItemRenderer
 import com.metrolist.innertubex.models.YouTubeClient
 import com.metrolist.innertubex.models.response.SearchResponse
+import com.tuneplayer.app.data.model.AudioInfo
 import com.tuneplayer.app.data.model.Track
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.get
+import io.ktor.client.request.head
 import io.ktor.client.request.header
 import io.ktor.client.statement.bodyAsText
+import io.ktor.http.HttpHeaders
 import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.compression.ContentEncoding
@@ -27,6 +30,7 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
@@ -39,6 +43,7 @@ data class ResolvedAudio(
     val url: String,
     val mimeType: String?,
     val headers: Map<String, String>,
+    val codec: String? = null,
 )
 
 class YouTubeMusicRepository {
@@ -164,18 +169,43 @@ class YouTubeMusicRepository {
             audioQuality = AudioQuality.HIGH,
         ) ?: error("YouTube Music returned no playable audio stream.")
 
-        val headers = stream.headers
+        val requestHeaders = stream.headers
             .plus("User-Agent" to WEB_USER_AGENT)
             .plus("Referer" to "https://music.youtube.com/")
             .plus("Origin" to "https://music.youtube.com")
 
-        RESOLVED_HEADERS[stream.audioUrl] = headers
+        RESOLVED_HEADERS[stream.audioUrl] = requestHeaders
 
         return ResolvedAudio(
             url = stream.audioUrl,
             mimeType = stream.mimeType,
-            headers = headers,
+            headers = requestHeaders,
+            codec = AudioInfo.codecLabel(stream.mimeType),
         )
+    }
+
+    /**
+     * Estimates bitrate from the stream size and duration without downloading it.
+     *
+     * Runs separately from [resolveAudio] so playback can start immediately;
+     * WebM/Opus does not carry a bitrate field, so this fills the gap when the
+     * player cannot report one.
+     */
+    suspend fun estimateBitrateKbps(
+        url: String,
+        requestHeaders: Map<String, String>,
+        durationMs: Long,
+    ): Int? = withContext(Dispatchers.IO) {
+        if (durationMs <= 0L) return@withContext null
+        val lengthBytes = withTimeoutOrNull(3_000) {
+            runCatching {
+                httpClient.head(url) {
+                    requestHeaders.forEach { (key, value) -> header(key, value) }
+                    header("User-Agent", WEB_USER_AGENT)
+                }.headers[HttpHeaders.ContentLength]?.toLongOrNull()
+            }.getOrNull()
+        } ?: return@withContext null
+        (lengthBytes * 8 / durationMs).toInt()
     }
 
     /**

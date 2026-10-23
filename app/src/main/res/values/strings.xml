@@ -143,4 +143,8 @@
     <string name="library_refresh">Rescan library</string>
     <string name="settings_skip_silence">Skip silence</string>
     <string name="settings_skip_silence_summary">Jumps over silent passages in podcasts and live recordings.</string>
+    <string name="audio_bitrate_value">%1$d kbps</string>
+    <string name="audio_sample_rate_value">%1$s kHz</string>
+    <string name="queue_badge_overflow">99+</string>
+    <string name="search_empty_hint">Search for songs, albums, and artists.</string>
 </resources>

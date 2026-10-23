@@ -9,9 +9,12 @@ import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
+import androidx.media3.common.Tracks
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.tuneplayer.app.TunePlayerApp
@@ -19,6 +22,7 @@ import com.tuneplayer.app.log.LogCatcher
 import com.tuneplayer.app.data.prefs.PlayStatsStore
 import com.tuneplayer.app.data.prefs.PlaylistStore
 import com.tuneplayer.app.R
+import com.tuneplayer.app.data.model.AudioInfo
 import com.tuneplayer.app.data.model.Track
 import com.tuneplayer.app.data.model.LibrarySort
 import com.tuneplayer.app.data.model.applySort
@@ -38,6 +42,8 @@ data class TunePlayerUiState(
     val localTracks: List<Track> = emptyList(),
     val searchResults: List<Track> = emptyList(),
     val currentTrack: Track? = null,
+    /** Codec/bitrate of the playing stream, when the player or resolver knows it. */
+    val audioInfo: AudioInfo? = null,
     val query: String = "",
     val isLoadingLocal: Boolean = false,
     val isSearching: Boolean = false,
@@ -146,6 +152,10 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
                             override fun onPlaybackStateChanged(playbackState: Int) {
                                 if (playbackState == Player.STATE_ENDED) advanceAfterTrackEnded()
                             }
+
+                            override fun onTracksChanged(tracks: Tracks) {
+                                updateAudioInfo(tracks)
+                            }
                         })
                         uiState = uiState.copy(
                             playerReady = true,
@@ -153,6 +163,7 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
                             isShuffleEnabled = connectedController.shuffleModeEnabled,
                             repeatMode = connectedController.repeatMode,
                             playbackSpeed = connectedController.playbackParameters.speed,
+                            audioInfo = audioInfoFromTracks(connectedController.currentTracks),
                         )
                         startPositionPolling()
                         maybeRestoreQueue()
@@ -247,7 +258,7 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
         val index = playerIndexToQueueIndex[playerIndex]
         if (index in uiState.playbackQueue.indices && index != uiState.queueIndex) {
             val track = uiState.playbackQueue[index]
-            uiState = uiState.copy(queueIndex = index, currentTrack = track)
+            uiState = uiState.copy(queueIndex = index, currentTrack = track, audioInfo = null)
             recordHistory(track.id)
             publishWidgetState()
         }
@@ -391,7 +402,7 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
                 uiState = uiState.copy(error = app.getString(R.string.error_no_audio_uri))
                 return
             }
-            playResolved(track, mediaUri, null)
+            playResolved(track, mediaUri, null, null)
         } else {
             val videoId = track.videoId
             if (videoId == null) {
@@ -403,7 +414,34 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
                 val audio = youTubeRepository.resolveAudio(videoId)
                 uiState = uiState.copy(isSearching = false)
                 cacheResolvedUri(track.id, audio.url)
-                playResolved(track, audio.url, audio.mimeType)
+                playResolved(
+                    track = track,
+                    uri = audio.url,
+                    mimeType = audio.mimeType,
+                    info = AudioInfo(codec = audio.codec),
+                )
+                // Do not delay playback for a metadata HEAD request. Fill in the
+                // estimated bitrate if the player did not report one.
+                viewModelScope.launch {
+                    val estimated = youTubeRepository.estimateBitrateKbps(
+                        url = audio.url,
+                        requestHeaders = audio.headers,
+                        durationMs = track.durationMs,
+                    )
+                    if (estimated != null && uiState.currentTrack?.id == track.id) {
+                        val current = uiState.audioInfo
+                        if (current?.bitrateKbps == null) {
+                            uiState = uiState.copy(
+                                audioInfo = AudioInfo(
+                                    codec = current?.codec ?: audio.codec,
+                                    bitrateKbps = estimated,
+                                    sampleRateHz = current?.sampleRateHz,
+                                    channelCount = current?.channelCount,
+                                ),
+                            )
+                        }
+                    }
+                }
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
@@ -698,6 +736,7 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
             playbackQueue = emptyList(),
             queueIndex = 0,
             currentTrack = null,
+            audioInfo = null,
             isPlaying = false,
         )
         cancelSleepTimer()
@@ -994,7 +1033,12 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
      * queue is loaded, so shuffle/repeat/auto-advance keep working. Falls back
      * to a single item when no queue exists.
      */
-    private fun playResolved(track: Track, uri: String, mimeType: String?) {
+    private fun playResolved(
+        track: Track,
+        uri: String,
+        mimeType: String?,
+        info: AudioInfo?,
+    ) {
         val player = controller
         if (player == null) {
             uiState = uiState.copy(error = app.getString(R.string.error_player_not_ready))
@@ -1011,9 +1055,44 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
         }
         player.prepare()
         player.play()
-        uiState = uiState.copy(currentTrack = track, isPlaying = true)
+        uiState = uiState.copy(currentTrack = track, isPlaying = true, audioInfo = info)
         recordHistory(track.id)
         publishWidgetState()
+    }
+
+    /**
+     * Pulls codec/bitrate from the player's selected audio track.
+     *
+     * Formats reported by Media3 are authoritative when present; a resolver
+     * estimate is kept as a fallback because WebM/Opus often omits bitrate.
+     */
+    private fun updateAudioInfo(tracks: Tracks) {
+        val fresh = audioInfoFromTracks(tracks) ?: return
+        val fallback = uiState.audioInfo
+        uiState = uiState.copy(
+            audioInfo = fresh.copy(
+                codec = fresh.codec ?: fallback?.codec,
+                bitrateKbps = fresh.bitrateKbps ?: fallback?.bitrateKbps,
+            ),
+        )
+    }
+
+    @OptIn(UnstableApi::class)
+    private fun audioInfoFromTracks(tracks: Tracks): AudioInfo? {
+        val group = tracks.groups.firstOrNull {
+            it.type == C.TRACK_TYPE_AUDIO && it.isSelected
+        } ?: return null
+        val index = (0 until group.length).firstOrNull { group.isTrackSelected(it) } ?: 0
+        val format = group.getTrackFormat(index)
+        val bitrate = format.averageBitrate.takeIf { it > 0 }
+            ?: format.bitrate.takeIf { it > 0 }
+        val info = AudioInfo(
+            codec = AudioInfo.codecLabel(format.sampleMimeType, format.codecs),
+            bitrateKbps = bitrate?.let { (it + 500) / 1000 },
+            sampleRateHz = format.sampleRate.takeIf { it > 0 },
+            channelCount = format.channelCount.takeIf { it > 0 },
+        )
+        return info.takeIf { it != AudioInfo() }
     }
 
     private fun buildMediaItem(track: Track, uri: String, mimeType: String?): MediaItem {

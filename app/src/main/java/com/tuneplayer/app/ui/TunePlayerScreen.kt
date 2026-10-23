@@ -8,6 +8,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -31,6 +32,7 @@ import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
@@ -39,6 +41,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.PlaylistAdd
+import androidx.compose.material.icons.filled.QueuePlayNext
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.RepeatOne
 import androidx.compose.material.icons.filled.Shuffle
@@ -68,6 +71,8 @@ import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.DropdownMenu
@@ -109,8 +114,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
@@ -125,6 +133,7 @@ import androidx.media3.common.Player
 import coil3.compose.AsyncImage
 import com.tuneplayer.app.R
 import com.tuneplayer.app.data.lyrics.LrcParser
+import com.tuneplayer.app.data.model.AudioInfo
 import com.tuneplayer.app.data.model.LibrarySort
 import com.tuneplayer.app.data.model.Track
 import com.tuneplayer.app.data.prefs.PlaylistStore
@@ -281,7 +290,26 @@ fun TunePlayerScreen(
                     NavigationBarItem(
                         selected = selectedTab == 2,
                         onClick = { selectedTab = 2 },
-                        icon = { Icon(Icons.Default.QueueMusic, contentDescription = null) },
+                        icon = {
+                            val queueCount = state.playbackQueue.size
+                            BadgedBox(
+                                badge = {
+                                    if (queueCount > 0) {
+                                        Badge {
+                                            Text(
+                                                if (queueCount > 99) {
+                                                    stringResource(R.string.queue_badge_overflow)
+                                                } else {
+                                                    queueCount.toString()
+                                                },
+                                            )
+                                        }
+                                    }
+                                },
+                            ) {
+                                Icon(Icons.Default.QueueMusic, contentDescription = null)
+                            }
+                        },
                         label = { Text(stringResource(R.string.tab_queue)) },
                     )
                     NavigationBarItem(
@@ -504,6 +532,7 @@ fun TunePlayerScreen(
         if (showPlayer && playingTrack != null) {
             NowPlayingSheet(
                 track = playingTrack,
+                audioInfo = state.audioInfo,
                 isPlaying = state.isPlaying,
                 isShuffleEnabled = state.isShuffleEnabled,
                 repeatMode = state.repeatMode,
@@ -600,18 +629,15 @@ private fun LibraryScreen(
     onShare: (Track) -> Unit,
 ) {
     if (!hasPermission) {
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center,
-        ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(stringResource(R.string.permission_needed))
-                Spacer(Modifier.height(12.dp))
+        EmptyState(
+            icon = Icons.Default.LibraryMusic,
+            title = stringResource(R.string.permission_needed),
+            action = {
                 Button(onClick = onRequestPermission) {
                     Text(stringResource(R.string.action_grant_access))
                 }
-            }
-        }
+            },
+        )
         return
     }
 
@@ -669,26 +695,16 @@ private fun LibraryScreen(
             }
         }
         if (tracks.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                        imageVector = Icons.Default.LibraryMusic,
-                        contentDescription = null,
-                        modifier = Modifier.size(48.dp),
-                    )
-                    Spacer(Modifier.height(16.dp))
-                    Text(
-                        text = stringResource(R.string.library_empty),
-                        style = MaterialTheme.typography.bodyLarge,
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        text = stringResource(R.string.library_empty_hint),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
+            val hasQuery = query.isNotBlank()
+            EmptyState(
+                icon = if (hasQuery) Icons.Default.Search else Icons.Default.LibraryMusic,
+                title = stringResource(
+                    if (hasQuery) R.string.search_empty else R.string.library_empty,
+                ),
+                hint = stringResource(
+                    if (hasQuery) R.string.search_empty_hint else R.string.library_empty_hint,
+                ),
+            )
             return
         }
         if (grouping == LibraryGrouping.Songs) {
@@ -914,23 +930,11 @@ private fun FavoritesScreen(
     onShuffleAll: () -> Unit,
 ) {
     if (tracks.isEmpty()) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(
-                    Icons.Default.FavoriteBorder,
-                    contentDescription = null,
-                    modifier = Modifier.size(48.dp),
-                )
-                Spacer(Modifier.height(16.dp))
-                Text(stringResource(R.string.liked_empty), style = MaterialTheme.typography.bodyLarge)
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    stringResource(R.string.liked_empty_hint),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
+        EmptyState(
+            icon = Icons.Default.FavoriteBorder,
+            title = stringResource(R.string.liked_empty),
+            hint = stringResource(R.string.liked_empty_hint),
+        )
         return
     }
     Column(modifier = Modifier.fillMaxSize()) {
@@ -1048,9 +1052,11 @@ private fun YouTubeScreen(
                 CircularProgressIndicator()
             }
         } else if (results.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(stringResource(R.string.search_empty))
-            }
+            EmptyState(
+                icon = Icons.Default.Search,
+                title = stringResource(R.string.search_empty),
+                hint = stringResource(R.string.search_empty_hint),
+            )
         } else {
             TrackList(
                 tracks = results,
@@ -1174,17 +1180,29 @@ private fun TrackRow(
         Spacer(Modifier.width(12.dp))
         val isCurrent = LocalNowPlayingId.current == track.id
         Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = track.title,
-                style = MaterialTheme.typography.bodyLarge,
-                color = if (isCurrent) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    Color.Unspecified
-                },
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (isCurrent) {
+                    Icon(
+                        imageVector = Icons.Default.GraphicEq,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(16.dp),
+                    )
+                    Spacer(Modifier.width(4.dp))
+                }
+                Text(
+                    text = track.title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = if (isCurrent) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        Color.Unspecified
+                    },
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+            }
             Text(
                 text = buildString {
                     append(track.artist)
@@ -1222,7 +1240,10 @@ private fun TrackRow(
             )
         }
         IconButton(onClick = onPlayNext) {
-            Icon(Icons.Default.PlaylistAdd, contentDescription = stringResource(R.string.action_play_next))
+            Icon(
+                Icons.Default.QueuePlayNext,
+                contentDescription = stringResource(R.string.action_play_next),
+            )
         }
         IconButton(onClick = onShare) {
             Icon(Icons.Default.Share, contentDescription = stringResource(R.string.action_share))
@@ -1232,10 +1253,17 @@ private fun TrackRow(
 }
 
 @Composable
-private fun Artwork(track: Track, size: Int) {
+private fun Artwork(
+    track: Track,
+    size: Int,
+    cornerRadius: Int = 8,
+    shadowElevation: Int = 0,
+) {
+    val shape = RoundedCornerShape(cornerRadius.dp)
     val modifier = Modifier
         .size(size.dp)
-        .clip(RoundedCornerShape(8.dp))
+        .shadow(elevation = shadowElevation.dp, shape = shape)
+        .clip(shape)
         .background(MaterialTheme.colorScheme.surfaceVariant)
 
     if (track.artworkUri != null) {
@@ -1243,10 +1271,16 @@ private fun Artwork(track: Track, size: Int) {
             model = track.artworkUri,
             contentDescription = null,
             modifier = modifier,
+            contentScale = ContentScale.Crop,
         )
     } else {
         Box(modifier = modifier, contentAlignment = Alignment.Center) {
-            Icon(Icons.Default.MusicNote, contentDescription = null)
+            Icon(
+                imageVector = Icons.Default.MusicNote,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size((size * 0.28f).dp),
+            )
         }
     }
 }
@@ -1266,56 +1300,74 @@ private fun MiniPlayer(
     } else {
         0f
     }
-    Surface(tonalElevation = 3.dp) {
-        Column {
-            LinearProgressIndicator(
-                progress = { progress },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(3.dp),
-                color = MaterialTheme.colorScheme.primary,
-                trackColor = MaterialTheme.colorScheme.surfaceVariant,
-            )
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Box(modifier = Modifier.clickable(onClick = onOpenPlayer)) {
-                    Artwork(track = track, size = 44)
-                }
-                Spacer(Modifier.width(12.dp))
-                Column(
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+    ) {
+        Surface(
+            shape = RoundedCornerShape(20.dp),
+            tonalElevation = 4.dp,
+            shadowElevation = 8.dp,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Column {
+                LinearProgressIndicator(
+                    progress = { progress },
                     modifier = Modifier
-                        .weight(1f)
-                        .clickable(onClick = onOpenPlayer),
+                        .fillMaxWidth()
+                        .height(3.dp),
+                    color = MaterialTheme.colorScheme.primary,
+                    trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(
-                        text = track.title,
-                        style = MaterialTheme.typography.bodyMedium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        text = track.artist,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-                IconButton(onClick = onTogglePlayPause) {
-                    Icon(
-                        imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                        contentDescription = stringResource(if (isPlaying) R.string.action_pause else R.string.action_play),
-                    )
-                }
-                IconButton(onClick = onSkipNext) {
-                    Icon(
-                        imageVector = Icons.Default.SkipNext,
-                        contentDescription = stringResource(R.string.action_skip_next),
-                    )
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable(onClick = onOpenPlayer),
+                    ) {
+                        Artwork(track = track, size = 46, cornerRadius = 12)
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable(onClick = onOpenPlayer),
+                    ) {
+                        Text(
+                            text = track.title,
+                            style = MaterialTheme.typography.bodyMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.basicMarquee(),
+                        )
+                        Text(
+                            text = track.artist,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    IconButton(onClick = onTogglePlayPause) {
+                        Icon(
+                            imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                            contentDescription = stringResource(
+                                if (isPlaying) R.string.action_pause else R.string.action_play,
+                            ),
+                        )
+                    }
+                    IconButton(onClick = onSkipNext) {
+                        Icon(
+                            imageVector = Icons.Default.SkipNext,
+                            contentDescription = stringResource(R.string.action_skip_next),
+                        )
+                    }
                 }
             }
         }
@@ -1446,23 +1498,11 @@ private fun QueueScreen(
     var confirmClear by remember { mutableStateOf(false) }
 
     if (queue.isEmpty()) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(
-                    Icons.Default.LibraryMusic,
-                    contentDescription = null,
-                    modifier = Modifier.size(48.dp),
-                )
-                Spacer(Modifier.height(16.dp))
-                Text(stringResource(R.string.queue_empty), style = MaterialTheme.typography.bodyLarge)
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    stringResource(R.string.queue_empty_hint),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
+        EmptyState(
+            icon = Icons.Default.QueueMusic,
+            title = stringResource(R.string.queue_empty),
+            hint = stringResource(R.string.queue_empty_hint),
+        )
         return
     }
 
@@ -1659,6 +1699,7 @@ private fun shareTrack(context: android.content.Context, track: Track) {
 @Composable
 private fun NowPlayingSheet(
     track: Track,
+    audioInfo: AudioInfo?,
     isPlaying: Boolean,
     isShuffleEnabled: Boolean,
     repeatMode: Int,
@@ -1686,7 +1727,12 @@ private fun NowPlayingSheet(
                 .padding(bottom = 32.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Artwork(track = track, size = 240)
+            Artwork(
+                track = track,
+                size = 248,
+                cornerRadius = 20,
+                shadowElevation = 12,
+            )
             Spacer(Modifier.height(20.dp))
             Text(
                 text = track.title,
@@ -1703,6 +1749,47 @@ private fun NowPlayingSheet(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
+            val album = track.album?.trim().orEmpty()
+            if (album.isNotEmpty() && !album.equals(track.artist, ignoreCase = true)) {
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = album,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            val bitrateKbps = audioInfo?.bitrateKbps
+            val sampleRateHz = audioInfo?.sampleRateHz
+            val bitrateText = if (bitrateKbps != null) {
+                stringResource(R.string.audio_bitrate_value, bitrateKbps)
+            } else {
+                null
+            }
+            val sampleRateText = if (sampleRateHz != null && sampleRateHz > 0) {
+                val value = if (sampleRateHz % 1000 == 0) {
+                    (sampleRateHz / 1000).toString()
+                } else {
+                    "%.1f".format(sampleRateHz / 1000f)
+                }
+                stringResource(R.string.audio_sample_rate_value, value)
+            } else {
+                null
+            }
+            val audioMeta = listOfNotNull(
+                audioInfo?.codec,
+                bitrateText,
+                sampleRateText,
+            ).joinToString(" · ")
+            if (audioMeta.isNotEmpty()) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = audioMeta,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             Spacer(Modifier.height(20.dp))
             SeekBarRow(
                 positionMs = positionMs,
@@ -2041,23 +2128,11 @@ private fun HistoryScreen(
     onShuffleAll: () -> Unit,
 ) {
     if (tracks.isEmpty()) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(
-                    Icons.Default.History,
-                    contentDescription = null,
-                    modifier = Modifier.size(48.dp),
-                )
-                Spacer(Modifier.height(16.dp))
-                Text(stringResource(R.string.history_empty), style = MaterialTheme.typography.bodyLarge)
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    stringResource(R.string.history_empty_hint),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
+        EmptyState(
+            icon = Icons.Default.History,
+            title = stringResource(R.string.history_empty),
+            hint = stringResource(R.string.history_empty_hint),
+        )
         return
     }
     Column(modifier = Modifier.fillMaxSize()) {
@@ -2112,20 +2187,16 @@ private fun PlaylistsScreen(
         }
 
         if (playlists.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        stringResource(R.string.playlists_empty),
-                        style = MaterialTheme.typography.bodyLarge,
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        stringResource(R.string.playlists_empty_hint),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
+            EmptyState(
+                icon = Icons.Default.PlaylistPlay,
+                title = stringResource(R.string.playlists_empty),
+                hint = stringResource(R.string.playlists_empty_hint),
+                action = {
+                    TextButton(onClick = { showCreate = true }) {
+                        Text(stringResource(R.string.action_create_playlist))
+                    }
+                },
+            )
             return@Column
         }
 
@@ -2276,6 +2347,64 @@ private fun PlaylistNameDialog(
     )
 }
 
+/**
+ * Shared empty state: a tonal icon bubble, a short title, and optional hint
+ * and action. Keeps empty screens feeling intentional instead of unfinished.
+ */
+@Composable
+private fun EmptyState(
+    icon: ImageVector,
+    title: String,
+    hint: String? = null,
+    action: (@Composable () -> Unit)? = null,
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 24.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.primaryContainer,
+                modifier = Modifier.size(76.dp),
+            ) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        modifier = Modifier.size(34.dp),
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                    )
+                }
+            }
+            Spacer(Modifier.height(18.dp))
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                textAlign = TextAlign.Center,
+            )
+            if (hint != null) {
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = hint,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                )
+            }
+            if (action != null) {
+                Spacer(Modifier.height(16.dp))
+                action()
+            }
+        }
+    }
+}
+
 @Composable
 private fun MoreSheetItem(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
@@ -2308,23 +2437,11 @@ private fun StatsScreen(
     onShare: (Track) -> Unit,
 ) {
     if (totalPlays == 0) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(
-                    Icons.Default.BarChart,
-                    contentDescription = null,
-                    modifier = Modifier.size(48.dp),
-                )
-                Spacer(Modifier.height(16.dp))
-                Text(stringResource(R.string.stats_empty), style = MaterialTheme.typography.bodyLarge)
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    stringResource(R.string.stats_empty_hint),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
+        EmptyState(
+            icon = Icons.Default.BarChart,
+            title = stringResource(R.string.stats_empty),
+            hint = stringResource(R.string.stats_empty_hint),
+        )
         return
     }
 

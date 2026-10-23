@@ -143,4 +143,8 @@
     <string name="library_refresh">ライブラリを再読み込み</string>
     <string name="settings_skip_silence">無音をスキップ</string>
     <string name="settings_skip_silence_summary">ポッドキャストやライブ録音の無音部分を飛ばします。</string>
+    <string name="audio_bitrate_value">%1$d kbps</string>
+    <string name="audio_sample_rate_value">%1$s kHz</string>
+    <string name="queue_badge_overflow">99+</string>
+    <string name="search_empty_hint">曲、アルバム、アーティストを検索します。</string>
 </resources>
