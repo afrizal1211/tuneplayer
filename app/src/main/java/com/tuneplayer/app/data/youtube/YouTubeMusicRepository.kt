@@ -53,6 +53,11 @@ data class YouTubeSearchSuggestions(
     val tracks: List<Track> = emptyList(),
 )
 
+private data class HomeShelf(
+    val title: String,
+    val tracks: List<Track>,
+)
+
 class YouTubeMusicRepository {
 
     companion object {
@@ -66,6 +71,10 @@ class YouTubeMusicRepository {
         private val SEARCH_SUGGESTION_LABELS = setOf(
             "song", "video", "album", "single", "ep", "playlist", "artist",
         )
+
+        private val HOME_RECOMMENDATION_MARKERS =
+            listOf("quick", "pick", "recommend", "mix", "trending")
+        private val HOME_AVOID_MARKERS = listOf("recent", "history", "listen again")
     }
 
     private val json = Json {
@@ -185,6 +194,71 @@ class YouTubeMusicRepository {
                 .take(6),
             tracks = tracks.distinctBy { it.id }.take(6),
         )
+    }
+
+    /**
+     * Home-feed picks for the empty search screen.
+     *
+     * The guest feed exposes a "Quick picks" carousel; signed-in feeds add more
+     * shelves, so a matching shelf is preferred over whichever one happens to
+     * come first. Playlists and artist rows are skipped because only playable
+     * tracks can be represented by [Track] here.
+     */
+    suspend fun homeRecommendations(limit: Int = 12): List<Track> {
+        val response = innerTube
+            .browse(
+                client = YouTubeClient.WEB_REMIX,
+                browseId = "FEmusic_home",
+            )
+            .body<JsonObject>()
+
+        val shelves = mutableListOf<HomeShelf>()
+        collectHomeShelves(response, shelves)
+        val candidates = shelves.filterNot { shelf ->
+            HOME_AVOID_MARKERS.any { marker -> marker in shelf.title.lowercase() }
+        }
+        val preferred = candidates.firstOrNull { shelf ->
+            HOME_RECOMMENDATION_MARKERS.any { marker -> marker in shelf.title.lowercase() }
+        } ?: candidates.firstOrNull() ?: shelves.firstOrNull()
+
+        return preferred?.tracks.orEmpty().distinctBy { it.id }.take(limit)
+    }
+
+    private fun collectHomeShelves(element: JsonElement, output: MutableList<HomeShelf>) {
+        when (element) {
+            is JsonObject -> {
+                val shelf = element["musicCarouselShelfRenderer"] as? JsonObject
+                if (shelf != null) {
+                    val renderers = mutableListOf<JsonObject>()
+                    collectRenderersDeep(shelf, renderers)
+                    val tracks = renderers
+                        .mapNotNull(::parseTrackRenderer)
+                        .distinctBy { it.id }
+                    if (tracks.isNotEmpty()) {
+                        output += HomeShelf(title = homeShelfTitle(shelf), tracks = tracks)
+                    }
+                } else {
+                    element.values.forEach { collectHomeShelves(it, output) }
+                }
+            }
+
+            is JsonArray -> element.forEach { collectHomeShelves(it, output) }
+
+            else -> Unit
+        }
+    }
+
+    private fun homeShelfTitle(shelf: JsonObject): String {
+        val header = (shelf["header"] as? JsonObject)
+            ?.get("musicCarouselShelfBasicHeaderRenderer") as? JsonObject
+        val runs = (header?.get("title") as? JsonObject)?.get("runs") as? JsonArray
+        return runs?.joinToString("") { run ->
+            (run as? JsonObject)
+                ?.get("text")
+                ?.jsonPrimitive
+                ?.contentOrNull
+                .orEmpty()
+        }?.trim().orEmpty()
     }
 
     private fun parseTrackRenderer(rendererJson: JsonObject): Track? =

@@ -49,6 +49,8 @@ data class TunePlayerUiState(
     val searchSuggestions: List<String> = emptyList(),
     val searchRecommendations: List<Track> = emptyList(),
     val isLoadingSuggestions: Boolean = false,
+    val homeRecommendations: List<Track> = emptyList(),
+    val isLoadingHomeRecommendations: Boolean = false,
     val currentTrack: Track? = null,
     /** Codec/bitrate of the playing stream, when the player or resolver knows it. */
     val audioInfo: AudioInfo? = null,
@@ -374,6 +376,32 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
             searchRecommendations = if (changed) emptyList() else uiState.searchRecommendations,
         )
         scheduleSearchSuggestions(query)
+        if (query.isBlank()) loadHomeRecommendations()
+    }
+
+    /**
+     * Home-feed picks for the empty search tab.
+     *
+     * Guarded so switching tabs does not refetch a loaded shelf, while a failed
+     * or empty response can be retried by opening or clearing the search tab.
+     */
+    fun loadHomeRecommendations() {
+        if (uiState.isLoadingHomeRecommendations || uiState.homeRecommendations.isNotEmpty()) return
+        uiState = uiState.copy(isLoadingHomeRecommendations = true)
+        viewModelScope.launch {
+            try {
+                val tracks = youTubeRepository.homeRecommendations()
+                uiState = uiState.copy(
+                    homeRecommendations = tracks,
+                    isLoadingHomeRecommendations = false,
+                )
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                LogCatcher.d(TAG, "YouTube recommendations failed: ${error.message}")
+                uiState = uiState.copy(isLoadingHomeRecommendations = false)
+            }
+        }
     }
 
     /**
@@ -1031,7 +1059,11 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
         app.settingsStore.youtubeAuthUser = "0"
         youTubeRepository.applySession(normalized, dataSyncId = null, authUser = "0")
         resolvedUris.clear()
-        uiState = uiState.copy(youtubeSignedIn = true, error = null)
+        uiState = uiState.copy(
+            youtubeSignedIn = true,
+            error = null,
+            homeRecommendations = emptyList(),
+        )
         LogCatcher.d(TAG, "YouTube Music account connected")
     }
 
@@ -1043,7 +1075,10 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
             CookieManager.getInstance().removeAllCookies(null)
             CookieManager.getInstance().flush()
         }
-        uiState = uiState.copy(youtubeSignedIn = false)
+        uiState = uiState.copy(
+            youtubeSignedIn = false,
+            homeRecommendations = emptyList(),
+        )
         LogCatcher.d(TAG, "YouTube Music account disconnected")
     }
 

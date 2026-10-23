@@ -178,6 +178,9 @@ fun TunePlayerScreen(
     }
 
     var selectedTab by rememberSaveable { mutableIntStateOf(initialTab) }
+    LaunchedEffect(selectedTab) {
+        if (selectedTab == 1) viewModel.loadHomeRecommendations()
+    }
     var showSleepDialog by rememberSaveable { mutableStateOf(false) }
     var showLyricsSheet by rememberSaveable { mutableStateOf(false) }
     var showMore by rememberSaveable { mutableStateOf(false) }
@@ -402,6 +405,8 @@ fun TunePlayerScreen(
                     suggestions = state.searchSuggestions,
                     recommendations = state.searchRecommendations,
                     isLoadingSuggestions = state.isLoadingSuggestions,
+                    homeRecommendations = state.homeRecommendations,
+                    isLoadingHomeRecommendations = state.isLoadingHomeRecommendations,
                     onQueryChange = viewModel::updateQuery,
                     onSearch = viewModel::search,
                     searchHistory = state.searchHistory,
@@ -1005,6 +1010,8 @@ private fun YouTubeScreen(
     suggestions: List<String>,
     recommendations: List<Track>,
     isLoadingSuggestions: Boolean,
+    homeRecommendations: List<Track>,
+    isLoadingHomeRecommendations: Boolean,
     searchHistory: List<String>,
     onQueryChange: (String) -> Unit,
     onSearch: () -> Unit,
@@ -1071,7 +1078,18 @@ private fun YouTubeScreen(
 
         val hasSuggestions = query.isNotBlank() &&
             (suggestions.isNotEmpty() || recommendations.isNotEmpty())
-        if (!isSearching && hasSuggestions) {
+        if (query.isEmpty() && homeRecommendations.isNotEmpty()) {
+            SearchSuggestionList(
+                suggestions = emptyList(),
+                recommendations = homeRecommendations,
+                favoriteIds = favoriteIds,
+                onSuggestionClick = {},
+                onPlay = onPlay,
+                onPlayNext = onPlayNext,
+                onToggleFavorite = onToggleFavorite,
+                onShare = onShare,
+            )
+        } else if (!isSearching && hasSuggestions) {
             SearchSuggestionList(
                 suggestions = suggestions,
                 recommendations = recommendations,
@@ -1086,7 +1104,11 @@ private fun YouTubeScreen(
                 onToggleFavorite = onToggleFavorite,
                 onShare = onShare,
             )
-        } else if (isSearching || isLoadingSuggestions) {
+        } else if (
+            isSearching ||
+            isLoadingSuggestions ||
+            (query.isEmpty() && isLoadingHomeRecommendations)
+        ) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator()
             }
