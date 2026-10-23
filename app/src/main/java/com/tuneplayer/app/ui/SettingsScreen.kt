@@ -40,8 +40,12 @@ fun SettingsScreen(
     equalizerEnabled: Boolean,
     bassBoostLevel: Int,
     virtualizerLevel: Int,
+    keepScreenOn: Boolean,
+    hapticsEnabled: Boolean,
     onThemeChange: (AppTheme) -> Unit,
     onEqualizerChange: (Boolean, Int, Int) -> Unit,
+    onKeepScreenOnChange: (Boolean) -> Unit,
+    onHapticsChange: (Boolean) -> Unit,
 ) {
     var showLogs by remember { mutableStateOf(false) }
     val context = LocalContext.current
@@ -71,6 +75,19 @@ fun SettingsScreen(
                 }
             }
         }
+
+        Spacer(Modifier.height(24.dp))
+        SettingsSectionTitle(stringResource(R.string.settings_playback))
+        SettingsToggleRow(
+            label = stringResource(R.string.settings_keep_screen_on),
+            checked = keepScreenOn,
+            onCheckedChange = onKeepScreenOnChange,
+        )
+        SettingsToggleRow(
+            label = stringResource(R.string.settings_haptics),
+            checked = hapticsEnabled,
+            onCheckedChange = onHapticsChange,
+        )
 
         Spacer(Modifier.height(24.dp))
         SettingsSectionTitle(stringResource(R.string.settings_diagnostics))
@@ -192,6 +209,24 @@ private fun LogViewerDialog(
             }
         },
     )
+}
+
+@Composable
+private fun SettingsToggleRow(
+    label: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(label, style = MaterialTheme.typography.bodyLarge)
+        Switch(checked = checked, onCheckedChange = onCheckedChange)
+    }
 }
 
 @Composable

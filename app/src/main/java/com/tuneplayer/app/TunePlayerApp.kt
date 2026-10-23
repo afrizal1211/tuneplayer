@@ -5,6 +5,8 @@ import com.tuneplayer.app.data.local.LocalMusicRepository
 import com.tuneplayer.app.data.prefs.FavoriteStore
 import com.tuneplayer.app.data.prefs.SettingsStore
 import com.tuneplayer.app.data.youtube.YouTubeMusicRepository
+import com.tuneplayer.app.data.prefs.PlayStatsStore
+import com.tuneplayer.app.data.prefs.PlaylistStore
 import com.tuneplayer.app.log.LogCatcher
 
 class TunePlayerApp : Application() {
@@ -28,5 +30,13 @@ class TunePlayerApp : Application() {
 
     val youTubeMusicRepository: YouTubeMusicRepository by lazy {
         YouTubeMusicRepository()
+    }
+
+    val playlistStore: PlaylistStore by lazy {
+        PlaylistStore(this)
+    }
+
+    val playStatsStore: PlayStatsStore by lazy {
+        PlayStatsStore(this)
     }
 }

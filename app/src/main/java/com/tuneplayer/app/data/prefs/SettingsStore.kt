@@ -52,6 +52,44 @@ class SettingsStore(context: Context) {
             prefs.edit().putBoolean(KEY_LIBRARY_SORT_DESC, value).apply()
         }
 
+    var gridLayout: Boolean
+        get() = prefs.getBoolean(KEY_GRID_LAYOUT, false)
+        set(value) {
+            prefs.edit().putBoolean(KEY_GRID_LAYOUT, value).apply()
+        }
+
+    var keepScreenOn: Boolean
+        get() = prefs.getBoolean(KEY_KEEP_SCREEN_ON, false)
+        set(value) {
+            prefs.edit().putBoolean(KEY_KEEP_SCREEN_ON, value).apply()
+        }
+
+    var hapticsEnabled: Boolean
+        get() = prefs.getBoolean(KEY_HAPTICS, true)
+        set(value) {
+            prefs.edit().putBoolean(KEY_HAPTICS, value).apply()
+        }
+
+    var searchHistory: List<String>
+        get() = prefs.getString(KEY_SEARCH_HISTORY, null)
+            ?.split(SEP)
+            ?.filter { it.isNotEmpty() }
+            .orEmpty()
+        set(value) {
+            prefs.edit().putString(KEY_SEARCH_HISTORY, value.take(SEARCH_HISTORY_LIMIT).joinToString(SEP)).apply()
+        }
+
+    /** Newest first, deduped, capped. */
+    fun recordSearch(query: String) {
+        val trimmed = query.trim()
+        if (trimmed.isEmpty()) return
+        searchHistory = (listOf(trimmed) + searchHistory.filter { !it.equals(trimmed, ignoreCase = true) })
+    }
+
+    fun clearSearchHistory() {
+        searchHistory = emptyList()
+    }
+
     private companion object {
         const val KEY_THEME = "theme"
         const val KEY_EQ_ENABLED = "eq_enabled"
@@ -59,5 +97,11 @@ class SettingsStore(context: Context) {
         const val KEY_VIRTUALIZER = "virtualizer"
         const val KEY_LIBRARY_SORT = "library_sort"
         const val KEY_LIBRARY_SORT_DESC = "library_sort_desc"
+        const val KEY_GRID_LAYOUT = "grid_layout"
+        const val KEY_KEEP_SCREEN_ON = "keep_screen_on"
+        const val KEY_HAPTICS = "haptics"
+        const val KEY_SEARCH_HISTORY = "search_history"
+        const val SEP = "\u001F"
+        const val SEARCH_HISTORY_LIMIT = 20
     }
 }

@@ -40,6 +40,8 @@ import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.PlaylistPlay
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material.icons.filled.Timer
@@ -51,6 +53,11 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Equalizer
 import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.FlowRow
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.AlertDialog
@@ -99,6 +106,7 @@ import com.tuneplayer.app.R
 import com.tuneplayer.app.data.lyrics.LrcParser
 import com.tuneplayer.app.data.model.LibrarySort
 import com.tuneplayer.app.data.model.Track
+import com.tuneplayer.app.data.prefs.PlaylistStore
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardActions
@@ -140,6 +148,21 @@ fun TunePlayerScreen(
     var selectedTab by rememberSaveable { mutableIntStateOf(initialTab) }
     var showSleepDialog by rememberSaveable { mutableStateOf(false) }
     var showLyricsSheet by rememberSaveable { mutableStateOf(false) }
+    var showNerdStats by rememberSaveable { mutableStateOf(false) }
+
+    // Tabs: 0 Library, 1 YouTube, 2 Queue, 3 Liked, 4 History, 5 Playlists, 6 Settings
+    val keepScreenOn = state.keepScreenOn
+    val activity = context as? android.app.Activity
+    DisposableEffect(keepScreenOn) {
+        if (keepScreenOn) {
+            activity?.window?.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        } else {
+            activity?.window?.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+        onDispose {
+            activity?.window?.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -212,6 +235,18 @@ fun TunePlayerScreen(
                     NavigationBarItem(
                         selected = selectedTab == 4,
                         onClick = { selectedTab = 4 },
+                        icon = { Icon(Icons.Default.History, contentDescription = null) },
+                        label = { Text(stringResource(R.string.tab_history)) },
+                    )
+                    NavigationBarItem(
+                        selected = selectedTab == 5,
+                        onClick = { selectedTab = 5 },
+                        icon = { Icon(Icons.Default.PlaylistPlay, contentDescription = null) },
+                        label = { Text(stringResource(R.string.tab_playlists)) },
+                    )
+                    NavigationBarItem(
+                        selected = selectedTab == 6,
+                        onClick = { selectedTab = 6 },
                         icon = { Icon(Icons.Default.Settings, contentDescription = null) },
                         label = { Text(stringResource(R.string.tab_settings)) },
                     )
@@ -246,6 +281,9 @@ fun TunePlayerScreen(
                     onQueryChange = viewModel::updateLibraryQuery,
                     onSortChange = viewModel::setLibrarySort,
                     onToggleSortDirection = viewModel::toggleLibrarySortDirection,
+                    onToggleLayout = viewModel::toggleGridLayout,
+                    onShuffleAll = viewModel::shuffleAll,
+                    onPlayAll = viewModel::playAll,
                     onPlay = viewModel::play,
                     onPlayNext = viewModel::playNext,
                     onToggleFavorite = viewModel::toggleFavorite,
@@ -259,6 +297,8 @@ fun TunePlayerScreen(
                     isSearching = state.isSearching,
                     onQueryChange = viewModel::updateQuery,
                     onSearch = viewModel::search,
+                    searchHistory = state.searchHistory,
+                    onClearSearchHistory = viewModel::clearSearchHistory,
                     onPlay = viewModel::play,
                     onPlayNext = viewModel::playNext,
                     onToggleFavorite = viewModel::toggleFavorite,
@@ -284,13 +324,40 @@ fun TunePlayerScreen(
                     onShare = { track -> shareTrack(context, track) },
                 )
 
-                4 -> SettingsScreen(
+                4 -> HistoryScreen(
+                    tracks = state.historyTracks,
+                    favoriteIds = state.favoriteIds,
+                    onPlay = viewModel::play,
+                    onPlayNext = viewModel::playNext,
+                    onToggleFavorite = viewModel::toggleFavorite,
+                    onShare = { track -> shareTrack(context, track) },
+                )
+
+                5 -> PlaylistsScreen(
+                    playlists = viewModel.playlists(),
+                    tracksFor = viewModel::tracksForPlaylist,
+                    favoriteIds = state.favoriteIds,
+                    onCreate = { name -> viewModel.createPlaylist(name) },
+                    onDelete = viewModel::deletePlaylist,
+                    onRename = { id, name -> viewModel.renamePlaylist(id, name) },
+                    onPlay = viewModel::playPlaylist,
+                    onPlayTrack = viewModel::play,
+                    onPlayNext = viewModel::playNext,
+                    onToggleFavorite = viewModel::toggleFavorite,
+                    onShare = { track -> shareTrack(context, track) },
+                )
+
+                6 -> SettingsScreen(
                     theme = state.theme,
                     equalizerEnabled = state.equalizerEnabled,
                     bassBoostLevel = state.bassBoostLevel,
                     virtualizerLevel = state.virtualizerLevel,
+                    keepScreenOn = state.keepScreenOn,
+                    hapticsEnabled = state.hapticsEnabled,
                     onThemeChange = viewModel::setTheme,
                     onEqualizerChange = viewModel::updateEqualizer,
+                    onKeepScreenOnChange = viewModel::setKeepScreenOn,
+                    onHapticsChange = viewModel::setHapticsEnabled,
                 )
             }
         }
@@ -320,9 +387,14 @@ fun TunePlayerScreen(
             SleepTimerDialog(
                 currentMinutes = (state.sleepDurationMillis / 60_000).toInt(),
                 isActive = state.isSleepTimerActive,
+                finishTrackArmed = state.sleepFinishTrack,
                 onDismiss = { showSleepDialog = false },
                 onSelect = { minutes ->
                     viewModel.setSleepDuration(minutes)
+                    showSleepDialog = false
+                },
+                onFinishTrack = {
+                    viewModel.setSleepFinishTrack()
                     showSleepDialog = false
                 },
                 onCancelTimer = {
@@ -347,6 +419,9 @@ private fun LibraryScreen(
     onQueryChange: (String) -> Unit,
     onSortChange: (LibrarySort) -> Unit,
     onToggleSortDirection: () -> Unit,
+    onToggleLayout: () -> Unit,
+    onShuffleAll: () -> Unit,
+    onPlayAll: () -> Unit,
     onPlay: (Track) -> Unit,
     onPlayNext: (Track) -> Unit,
     onToggleFavorite: (Track) -> Unit,
@@ -383,7 +458,25 @@ private fun LibraryScreen(
             onQueryChange = onQueryChange,
             onSortChange = onSortChange,
             onToggleSortDirection = onToggleSortDirection,
+            onToggleLayout = onToggleLayout,
         )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            AssistChip(
+                onClick = onShuffleAll,
+                label = { Text(stringResource(R.string.action_shuffle_all)) },
+                leadingIcon = { Icon(Icons.Default.Shuffle, contentDescription = null) },
+            )
+            AssistChip(
+                onClick = onPlayAll,
+                label = { Text(stringResource(R.string.action_play_all)) },
+                leadingIcon = { Icon(Icons.Default.PlayArrow, contentDescription = null) },
+            )
+        }
         if (tracks.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(stringResource(R.string.library_empty))
@@ -410,6 +503,7 @@ private fun LibraryFilterBar(
     onQueryChange: (String) -> Unit,
     onSortChange: (LibrarySort) -> Unit,
     onToggleSortDirection: () -> Unit,
+    onToggleLayout: () -> Unit,
 ) {
     var sortMenuOpen by remember { mutableStateOf(false) }
 
@@ -433,6 +527,12 @@ private fun LibraryFilterBar(
                 }
             },
         )
+        IconButton(onClick = onToggleLayout) {
+            Icon(
+                Icons.Default.GridView,
+                contentDescription = stringResource(R.string.action_toggle_layout),
+            )
+        }
         Box {
             IconButton(onClick = { sortMenuOpen = true }) {
                 Icon(Icons.Default.Sort, contentDescription = stringResource(R.string.sort_by_title))
@@ -530,8 +630,10 @@ private fun YouTubeScreen(
     results: List<Track>,
     favoriteIds: Set<String>,
     isSearching: Boolean,
+    searchHistory: List<String>,
     onQueryChange: (String) -> Unit,
     onSearch: () -> Unit,
+    onClearSearchHistory: () -> Unit,
     onPlay: (Track) -> Unit,
     onPlayNext: (Track) -> Unit,
     onToggleFavorite: (Track) -> Unit,
@@ -554,6 +656,42 @@ private fun YouTubeScreen(
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
             keyboardActions = KeyboardActions(onSearch = { onSearch() }),
         )
+
+        if (searchHistory.isNotEmpty() && query.isEmpty()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = stringResource(R.string.search_history_title),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(onClick = onClearSearchHistory) {
+                    Text(stringResource(R.string.search_history_clear))
+                }
+            }
+            FlowRow(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                searchHistory.forEach { past ->
+                    SuggestionChip(
+                        onClick = {
+                            onQueryChange(past)
+                            onSearch()
+                        },
+                        label = { Text(past) },
+                    )
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+        }
 
         if (isSearching) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -738,8 +876,10 @@ private fun formatDuration(durationMs: Long): String {
 private fun SleepTimerDialog(
     currentMinutes: Int,
     isActive: Boolean,
+    finishTrackArmed: Boolean,
     onDismiss: () -> Unit,
     onSelect: (Int) -> Unit,
+    onFinishTrack: () -> Unit,
     onCancelTimer: () -> Unit,
 ) {
     AlertDialog(
@@ -774,6 +914,27 @@ private fun SleepTimerDialog(
                                 color = MaterialTheme.colorScheme.primary,
                             )
                         }
+                    }
+                }
+                HorizontalDivider()
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(onClick = onFinishTrack)
+                        .padding(vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = stringResource(R.string.sleep_finish_track),
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                    Spacer(Modifier.weight(1f))
+                    if (finishTrackArmed) {
+                        Text(
+                            text = "Active",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
                     }
                 }
                 if (isActive) {
@@ -1140,4 +1301,219 @@ private fun SyncedLyrics(
             )
         }
     }
+}
+
+/**
+ * Recently played. Track ids come from [com.tuneplayer.app.data.prefs.FavoriteStore]
+ * history and are resolved against whatever library metadata is loaded.
+ *
+ * Ids that no longer resolve (deleted file, stale YouTube entry) are dropped
+ * rather than shown as broken rows.
+ */
+@Composable
+private fun HistoryScreen(
+    tracks: List<Track>,
+    favoriteIds: Set<String>,
+    onPlay: (Track) -> Unit,
+    onPlayNext: (Track) -> Unit,
+    onToggleFavorite: (Track) -> Unit,
+    onShare: (Track) -> Unit,
+) {
+    if (tracks.isEmpty()) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Icon(
+                    Icons.Default.History,
+                    contentDescription = null,
+                    modifier = Modifier.size(48.dp),
+                )
+                Spacer(Modifier.height(16.dp))
+                Text(stringResource(R.string.history_empty), style = MaterialTheme.typography.bodyLarge)
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    stringResource(R.string.history_empty_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        return
+    }
+    TrackList(
+        tracks = tracks,
+        favoriteIds = favoriteIds,
+        onPlay = onPlay,
+        onPlayNext = onPlayNext,
+        onToggleFavorite = onToggleFavorite,
+        onShare = onShare,
+    )
+}
+
+@Composable
+private fun PlaylistsScreen(
+    playlists: List<PlaylistStore.Playlist>,
+    tracksFor: (PlaylistStore.Playlist) -> List<Track>,
+    favoriteIds: Set<String>,
+    onCreate: (String) -> Unit,
+    onDelete: (String) -> Unit,
+    onRename: (String, String) -> Unit,
+    onPlay: (PlaylistStore.Playlist, Int) -> Unit,
+    onPlayTrack: (Track) -> Unit,
+    onPlayNext: (Track) -> Unit,
+    onToggleFavorite: (Track) -> Unit,
+    onShare: (Track) -> Unit,
+) {
+    var openId by remember { mutableStateOf<String?>(null) }
+    var showCreate by remember { mutableStateOf(false) }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = stringResource(R.string.tab_playlists),
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.weight(1f),
+            )
+            TextButton(onClick = { showCreate = true }) {
+                Text(stringResource(R.string.action_create_playlist))
+            }
+        }
+
+        if (playlists.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        stringResource(R.string.playlists_empty),
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        stringResource(R.string.playlists_empty_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            return@Column
+        }
+
+        LazyColumn(modifier = Modifier.fillMaxSize()) {
+            items(items = playlists, key = { it.id }) { playlist ->
+                val count = tracksFor(playlist).size
+                ListItem(
+                    headlineContent = { Text(playlist.name) },
+                    supportingContent = {
+                        Text(stringResource(R.string.playlist_track_count, count))
+                    },
+                    leadingContent = {
+                        Icon(Icons.Default.PlaylistPlay, contentDescription = null)
+                    },
+                    trailingContent = {
+                        Row {
+                            IconButton(onClick = { onPlay(playlist, 0) }) {
+                                Icon(
+                                    Icons.Default.PlayArrow,
+                                    contentDescription = stringResource(R.string.action_play),
+                                )
+                            }
+                            IconButton(onClick = { onDelete(playlist.id) }) {
+                                Icon(
+                                    Icons.Default.Delete,
+                                    contentDescription = stringResource(R.string.action_delete_playlist),
+                                )
+                            }
+                        }
+                    },
+                    modifier = Modifier.clickable { openId = playlist.id },
+                )
+                HorizontalDivider()
+            }
+        }
+    }
+
+    if (showCreate) {
+        PlaylistNameDialog(
+            title = stringResource(R.string.action_create_playlist),
+            initialName = "",
+            onConfirm = { name ->
+                onCreate(name)
+                showCreate = false
+            },
+            onDismiss = { showCreate = false },
+        )
+    }
+
+    val open = playlists.firstOrNull { it.id == openId }
+    if (open != null) {
+        val tracks = tracksFor(open)
+        AlertDialog(
+            onDismissRequest = { openId = null },
+            title = { Text(open.name) },
+            text = {
+                if (tracks.isEmpty()) {
+                    Text(stringResource(R.string.playlists_empty))
+                } else {
+                    LazyColumn(modifier = Modifier.heightIn(max = 360.dp)) {
+                        items(items = tracks, key = { it.id }) { track ->
+                            TrackRow(
+                                track = track,
+                                isFavorite = track.id in favoriteIds,
+                                onPlay = {
+                                    onPlay(open, tracks.indexOfFirst { it.id == track.id })
+                                },
+                                onPlayNext = { onPlayNext(track) },
+                                onToggleFavorite = { onToggleFavorite(track) },
+                                onShare = { onShare(track) },
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { openId = null }) {
+                    Text(stringResource(R.string.action_close))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { onRename(open.id, open.name); openId = null }) {
+                    Text(stringResource(R.string.action_rename_playlist))
+                }
+            },
+        )
+    }
+}
+
+@Composable
+private fun PlaylistNameDialog(
+    title: String,
+    initialName: String,
+    onConfirm: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var name by remember { mutableStateOf(initialName) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                placeholder = { Text(stringResource(R.string.playlist_name_hint)) },
+                singleLine = true,
+            )
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onConfirm(name) },
+                enabled = name.isNotBlank(),
+            ) { Text(stringResource(R.string.action_create_playlist)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_close)) }
+        },
+    )
 }

@@ -17,6 +17,8 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.SessionToken
 import com.tuneplayer.app.TunePlayerApp
 import com.tuneplayer.app.log.LogCatcher
+import com.tuneplayer.app.data.prefs.PlayStatsStore
+import com.tuneplayer.app.data.prefs.PlaylistStore
 import com.tuneplayer.app.R
 import com.tuneplayer.app.data.model.Track
 import com.tuneplayer.app.data.model.LibrarySort
@@ -44,6 +46,13 @@ data class TunePlayerUiState(
     val error: String? = null,
     val sleepDurationMillis: Long = 0,
     val isSleepTimerActive: Boolean = false,
+    val sleepFinishTrack: Boolean = false,
+    val keepScreenOn: Boolean = false,
+    val hapticsEnabled: Boolean = true,
+    val gridLayout: Boolean = false,
+    val searchHistory: List<String> = emptyList(),
+    val historyTracks: List<Track> = emptyList(),
+    val lyricsOffsetMs: Long = 0L,
     val playbackQueue: List<Track> = emptyList(),
     val queueIndex: Int = 0,
     val theme: AppTheme = AppTheme.System,
@@ -72,6 +81,8 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
     private val localRepository = app.localMusicRepository
     private val youTubeRepository = app.youTubeMusicRepository
     private val favoriteStore = app.favoriteStore
+    private val playlistStore = app.playlistStore
+    private val playStatsStore = app.playStatsStore
     private val resolvedUris = LinkedHashMap<String, String>()
     private var positionPollJob: kotlinx.coroutines.Job? = null
 
@@ -94,6 +105,10 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
             favoriteIds = favoriteStore.favorites(),
             librarySort = app.settingsStore.librarySort,
             librarySortDescending = app.settingsStore.librarySortDescending,
+            keepScreenOn = app.settingsStore.keepScreenOn,
+            hapticsEnabled = app.settingsStore.hapticsEnabled,
+            gridLayout = app.settingsStore.gridLayout,
+            searchHistory = app.settingsStore.searchHistory,
         )
         controllerFuture.addListener(
             {
@@ -141,6 +156,7 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
             runCatching { localRepository.loadTracks() }
                 .onSuccess { tracks ->
                     uiState = uiState.copy(localTracks = tracks, isLoadingLocal = false)
+                    refreshHistoryTracks()
                 }
                 .onFailure { error ->
                     LogCatcher.e(TAG, "Local music load failed", error)
@@ -150,6 +166,13 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
                     )
                 }
         }
+    }
+
+    private fun refreshHistoryTracks() {
+        val known = (uiState.localTracks + uiState.searchResults).associateBy { it.id }
+        // Ids that no longer resolve are dropped rather than shown as broken rows.
+        val resolved = favoriteStore.history.mapNotNull { known[it] }
+        uiState = uiState.copy(historyTracks = resolved)
     }
 
     private fun startPositionPolling() {
@@ -272,6 +295,7 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
 
     private fun recordHistory(id: String) {
         favoriteStore.recordPlay(id)
+        playStatsStore.record(id)
     }
 
     /** Stream URIs are short-lived; cap the cache and let it expire with the process. */
@@ -289,11 +313,14 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
     fun search() {
         val query = uiState.query.trim()
         if (query.isEmpty()) return
+        app.settingsStore.recordSearch(query)
+        uiState = uiState.copy(searchHistory = app.settingsStore.searchHistory)
         viewModelScope.launch {
             uiState = uiState.copy(isSearching = true, error = null)
             runCatching { youTubeRepository.search(query) }
                 .onSuccess { tracks ->
                     uiState = uiState.copy(searchResults = tracks, isSearching = false)
+                    refreshHistoryTracks()
                 }
                 .onFailure { error ->
                     LogCatcher.e(TAG, "YouTube search failed", error)
@@ -371,23 +398,44 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     private var sleepTimerJob: kotlinx.coroutines.Job? = null
+    private var sleepTimerFinishTrack = false
 
-    /** Sleep timer is wall-clock: it counts down regardless of pause or track changes. */
+    /**
+     * Sleep timer is wall-clock: it counts down regardless of pause or track changes.
+     *
+     * When "finish current track" is armed the wait happens on the player's
+     * own end-of-media event instead of a [delay], so pausing does not burn
+     * the remaining wall-clock budget.
+     */
     private fun startSleepTimer() {
         sleepTimerJob?.cancel()
         val duration = uiState.sleepDurationMillis
         if (!uiState.isSleepTimerActive || duration <= 0) return
         sleepTimerJob = viewModelScope.launch {
-            delay(duration)
+            if (sleepTimerFinishTrack) {
+                // Wait for the player to reach the end of the current item.
+                while (true) {
+                    val player = controller
+                    val atEnd = player == null ||
+                        (player.duration > 0 && player.currentPosition >= player.duration - END_TOLERANCE_MS)
+                    if (atEnd || !uiState.isSleepTimerActive) break
+                    delay(500)
+                }
+            } else {
+                delay(duration)
+            }
+            if (!uiState.isSleepTimerActive) return@launch
             controller?.pause()
             uiState = uiState.copy(isSleepTimerActive = false, sleepDurationMillis = 0)
             sleepTimerJob = null
+            sleepTimerFinishTrack = false
         }
     }
 
     fun cancelSleepTimer() {
         sleepTimerJob?.cancel()
         sleepTimerJob = null
+        sleepTimerFinishTrack = false
         uiState = uiState.copy(isSleepTimerActive = false)
     }
 
@@ -400,12 +448,128 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
         startSleepTimer()
     }
 
+    /**
+     * Arms "stop when the current track ends" instead of a wall-clock countdown.
+     * The duration picker still reports an active timer; the stop happens at
+     * the track boundary.
+     */
+    fun setSleepFinishTrack() {
+        sleepTimerFinishTrack = true
+        uiState = uiState.copy(
+            sleepDurationMillis = 0,
+            isSleepTimerActive = true,
+            sleepFinishTrack = true,
+        )
+        startSleepTimer()
+    }
+
     fun toggleSleepTimer() {
         if (uiState.isSleepTimerActive) {
             cancelSleepTimer()
         } else {
             setSleepDuration(DEFAULT_SLEEP_MINUTES)
         }
+    }
+
+    // ---- Library bulk actions ----
+
+    /** Replaces the queue with every local track in shuffled order and plays. */
+    fun shuffleAll() {
+        val tracks = visibleLocalTracks
+        if (tracks.isEmpty()) return
+        val shuffled = tracks.shuffled()
+        uiState = uiState.copy(playbackQueue = shuffled, queueIndex = 0)
+        pushQueueToPlayer(shuffled, 0)
+        startTrack(shuffled.first())
+        LogCatcher.d(TAG, "shuffleAll: ${shuffled.size} tracks")
+    }
+
+    /** Replaces the queue with every local track in sort order and plays. */
+    fun playAll() {
+        val tracks = visibleLocalTracks
+        if (tracks.isEmpty()) return
+        uiState = uiState.copy(playbackQueue = tracks, queueIndex = 0)
+        pushQueueToPlayer(tracks, 0)
+        startTrack(tracks.first())
+        LogCatcher.d(TAG, "playAll: ${tracks.size} tracks")
+    }
+
+    // ---- Playlists ----
+
+    fun playlists(): List<PlaylistStore.Playlist> = playlistStore.all()
+
+    fun createPlaylist(name: String): PlaylistStore.Playlist? {
+        val trimmed = name.trim()
+        if (trimmed.isEmpty()) return null
+        val created = playlistStore.create(trimmed)
+        LogCatcher.d(TAG, "createPlaylist: $trimmed")
+        return created
+    }
+
+    fun deletePlaylist(id: String) = playlistStore.delete(id)
+
+    fun renamePlaylist(id: String, name: String) = playlistStore.rename(id, name)
+
+    fun addToPlaylist(playlistId: String, track: Track) {
+        playlistStore.addTrack(playlistId, track.id)
+        LogCatcher.d(TAG, "addToPlaylist: ${track.title} -> $playlistId")
+    }
+
+    fun removeFromPlaylist(playlistId: String, trackId: String) =
+        playlistStore.removeTrack(playlistId, trackId)
+
+    fun moveInPlaylist(playlistId: String, from: Int, to: Int) =
+        playlistStore.moveTrack(playlistId, from, to)
+
+    /** Resolves playlist ids against the local library plus current search results. */
+    fun tracksForPlaylist(playlist: PlaylistStore.Playlist): List<Track> {
+        val known = (uiState.localTracks + uiState.searchResults).associateBy { it.id }
+        return playlist.trackIds.mapNotNull { known[it] }
+    }
+
+    fun playPlaylist(playlist: PlaylistStore.Playlist, startIndex: Int = 0) {
+        val tracks = tracksForPlaylist(playlist)
+        if (tracks.isEmpty()) return
+        uiState = uiState.copy(playbackQueue = tracks, queueIndex = startIndex)
+        pushQueueToPlayer(tracks, startIndex)
+        startTrack(tracks[startIndex])
+    }
+
+    // ---- Stats ----
+
+    fun topTracks(limit: Int = 20): List<Track> {
+        val known = (uiState.localTracks + uiState.searchResults).associateBy { it.id }
+        return playStatsStore.topIds(limit).mapNotNull { known[it] }
+    }
+
+    fun totalPlays(): Int = playStatsStore.totalPlays()
+
+    fun distinctTracks(): Int = playStatsStore.distinctTracks()
+
+    fun setKeepScreenOn(enabled: Boolean) {
+        app.settingsStore.keepScreenOn = enabled
+        uiState = uiState.copy(keepScreenOn = enabled)
+    }
+
+    fun setHapticsEnabled(enabled: Boolean) {
+        app.settingsStore.hapticsEnabled = enabled
+        uiState = uiState.copy(hapticsEnabled = enabled)
+    }
+
+    fun toggleGridLayout() {
+        val next = !uiState.gridLayout
+        app.settingsStore.gridLayout = next
+        uiState = uiState.copy(gridLayout = next)
+    }
+
+    fun clearSearchHistory() {
+        app.settingsStore.clearSearchHistory()
+        uiState = uiState.copy(searchHistory = emptyList())
+    }
+
+    /** Shifts synced lyrics so line N matches audio N+offsetMs. */
+    fun setLyricsOffset(offsetMs: Long) {
+        uiState = uiState.copy(lyricsOffsetMs = offsetMs)
     }
 
     fun addToQueue(track: Track) {
@@ -591,6 +755,7 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
     private companion object {
         const val TAG = "TunePlayerVM"
         const val MAX_RESOLVED_CACHE = 50
+        const val END_TOLERANCE_MS = 750L
     }
 
     override fun onCleared() {
