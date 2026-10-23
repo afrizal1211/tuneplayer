@@ -74,7 +74,7 @@
     <string name="history_empty">Nothing played yet.</string>
     <string name="history_empty_hint">Tracks you play show up here.</string>
     <string name="playlists_empty">No playlists yet.</string>
-    <string name="playlists_empty_hint">Create one from any song's menu.</string>
+    <string name="playlists_empty_hint">Create one from any song\'s menu.</string>
     <string name="action_shuffle_all">Shuffle all</string>
     <string name="action_play_all">Play all</string>
     <string name="action_create_playlist">New playlist</string>
