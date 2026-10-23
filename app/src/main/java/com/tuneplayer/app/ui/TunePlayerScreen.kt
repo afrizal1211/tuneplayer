@@ -920,6 +920,11 @@ private fun LibraryFilterBar(
     }
 }
 
+private fun LyricsSource.labelRes(): Int = when (this) {
+    LyricsSource.YouTube -> R.string.lyrics_source_youtube
+    LyricsSource.Lrclib -> R.string.lyrics_source_lrclib
+}
+
 private fun LibrarySort.labelRes(): Int = when (this) {
     LibrarySort.Title -> R.string.sort_by_title
     LibrarySort.Artist -> R.string.sort_by_artist
