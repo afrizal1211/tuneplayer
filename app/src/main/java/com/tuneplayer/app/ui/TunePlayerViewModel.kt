@@ -16,7 +16,11 @@ import androidx.media3.session.MediaController
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.SessionToken
 import com.tuneplayer.app.TunePlayerApp
+import com.tuneplayer.app.R
 import com.tuneplayer.app.data.model.Track
+import com.tuneplayer.app.data.model.LibrarySort
+import com.tuneplayer.app.data.model.applySort
+import com.tuneplayer.app.data.model.matchesQuery
 import com.tuneplayer.app.data.prefs.AppTheme
 import com.tuneplayer.app.data.prefs.FavoriteStore
 import com.tuneplayer.app.data.lyrics.LrcParser
@@ -53,6 +57,9 @@ data class TunePlayerUiState(
     val repeatMode: Int = Player.REPEAT_MODE_OFF,
     val playbackSpeed: Float = 1.0f,
     val favoriteIds: Set<String> = emptySet(),
+    val librarySort: LibrarySort = LibrarySort.Title,
+    val librarySortDescending: Boolean = false,
+    val libraryQuery: String = "",
 )
 
 class TunePlayerViewModel(application: Application) : AndroidViewModel(application) {
@@ -82,6 +89,8 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
             bassBoostLevel = app.settingsStore.bassBoostLevel,
             virtualizerLevel = app.settingsStore.virtualizerLevel,
             favoriteIds = favoriteStore.favorites(),
+            librarySort = app.settingsStore.librarySort,
+            librarySortDescending = app.settingsStore.librarySortDescending,
         )
         controllerFuture.addListener(
             {
@@ -115,7 +124,7 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
                         startPositionPolling()
                     }
                     .onFailure { error ->
-                        uiState = uiState.copy(error = error.message ?: "Player connection failed.")
+                        uiState = uiState.copy(error = error.message ?: app.getString(R.string.error_connection))
                     }
             },
             ContextCompat.getMainExecutor(application),
@@ -132,7 +141,7 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
                 .onFailure { error ->
                     uiState = uiState.copy(
                         isLoadingLocal = false,
-                        error = error.message ?: "Could not read local music.",
+                        error = error.message ?: app.getString(R.string.error_local_failed),
                     )
                 }
         }
@@ -207,6 +216,27 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
         uiState = uiState.copy(playbackSpeed = next)
     }
 
+    /** Local library as the user wants it: filtered, then sorted. */
+    val visibleLocalTracks: List<Track>
+        get() = uiState.localTracks
+            .filter { it.matchesQuery(uiState.libraryQuery) }
+            .applySort(uiState.librarySort, uiState.librarySortDescending)
+
+    fun updateLibraryQuery(query: String) {
+        uiState = uiState.copy(libraryQuery = query)
+    }
+
+    fun setLibrarySort(sort: LibrarySort) {
+        uiState = uiState.copy(librarySort = sort)
+        app.settingsStore.librarySort = sort
+    }
+
+    fun toggleLibrarySortDirection() {
+        val descending = !uiState.librarySortDescending
+        uiState = uiState.copy(librarySortDescending = descending)
+        app.settingsStore.librarySortDescending = descending
+    }
+
     fun toggleFavorite(track: Track) {
         val added = favoriteStore.toggleFavorite(track.id)
         val ids = uiState.favoriteIds.toMutableSet()
@@ -242,7 +272,7 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
                 .onFailure { error ->
                     uiState = uiState.copy(
                         isSearching = false,
-                        error = error.message ?: "YouTube Music search failed.",
+                        error = error.message ?: app.getString(R.string.error_search_failed),
                     )
                 }
         }
@@ -273,14 +303,14 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
         if (track.isLocal) {
             val mediaUri = track.mediaUri
             if (mediaUri == null) {
-                uiState = uiState.copy(error = "Local track has no media URI.")
+                uiState = uiState.copy(error = app.getString(R.string.error_no_audio_uri))
                 return
             }
             playResolved(track, mediaUri, null)
         } else {
             val videoId = track.videoId
             if (videoId == null) {
-                uiState = uiState.copy(error = "YouTube track has no video id.")
+                uiState = uiState.copy(error = app.getString(R.string.error_no_video_id))
                 return
             }
             uiState = uiState.copy(isSearching = true)
@@ -293,7 +323,7 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
                 .onFailure { error ->
                     uiState = uiState.copy(
                         isSearching = false,
-                        error = error.message ?: "Could not resolve YouTube audio.",
+                        error = error.message ?: app.getString(R.string.error_resolve_failed),
                     )
                 }
         }
@@ -553,7 +583,7 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
     private fun playResolved(track: Track, uri: String, mimeType: String?) {
         val player = controller
         if (player == null) {
-            uiState = uiState.copy(error = "Player is not ready yet.")
+            uiState = uiState.copy(error = app.getString(R.string.error_player_not_ready))
             return
         }
 

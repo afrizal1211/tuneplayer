@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">TunePlayer</string>
+    <string name="widget_open_player">TunePlayerを開く</string>
+
+    <string name="tab_library">ライブラリ</string>
+    <string name="tab_youtube">YouTube</string>
+    <string name="tab_queue">キュー</string>
+    <string name="tab_liked">お気に入り</string>
+    <string name="tab_settings">設定</string>
+
+    <string name="search_hint">YouTube Musicを検索</string>
+    <string name="search_empty">曲、アルバム、アーティストを検索</string>
+    <string name="library_empty">ローカル音楽が見つかりません</string>
+    <string name="library_filter_hint">ライブラリを絞り込む</string>
+    <string name="queue_empty">キューは空です</string>
+    <string name="queue_empty_hint">曲を追加してキューを作成</string>
+    <string name="liked_empty">お気に入りの曲はまだありません</string>
+    <string name="liked_empty_hint">曲のハートをタップして保存</string>
+
+    <string name="action_play">再生</string>
+    <string name="action_pause">一時停止</string>
+    <string name="action_shuffle">シャッフル</string>
+    <string name="action_repeat">リピート</string>
+    <string name="action_favorite">お気に入り</string>
+    <string name="action_share">共有</string>
+    <string name="action_play_next">次に再生</string>
+    <string name="action_move_up">上へ移動</string>
+    <string name="action_move_down">下へ移動</string>
+    <string name="action_remove">キューから削除</string>
+    <string name="action_clear">消去</string>
+    <string name="action_grant_access">アクセスを許可</string>
+    <string name="action_cancel_timer">タイマーをキャンセル</string>
+    <string name="action_close">閉じる</string>
+
+    <string name="sleep_timer">スリープタイマー</string>
+    <string name="sleep_timer_prompt">再生を停止する時間:</string>
+    <string name="sleep_timer_active">%d分後に停止</string>
+    <string name="sort_by_title">タイトル</string>
+    <string name="sort_by_artist">アーティスト</string>
+    <string name="sort_by_album">アルバム</string>
+    <string name="sort_by_duration">長さ</string>
+    <string name="sort_ascending">昇順</string>
+    <string name="sort_descending">降順</string>
+    <string name="lyrics_none_local">ローカルファイルの歌詞はありません</string>
+    <string name="lyrics_none">この曲の歌詞はありません</string>
+    <string name="lyrics_nothing">再生していません</string>
+    <string name="now_playing">再生中</string>
+    <string name="error_no_audio_uri">ローカル曲にメディアURIがありません</string>
+    <string name="error_no_video_id">YouTube曲にビデオIDがありません</string>
+    <string name="error_player_not_ready">プレーヤーが未準備です</string>
+    <string name="error_local_failed">ローカル音楽を読み込めませんでした</string>
+    <string name="error_search_failed">YouTube Music検索に失敗しました</string>
+    <string name="error_resolve_failed">YouTube音声を解決できませんでした</string>
+    <string name="error_connection">プレーヤー接続に失敗しました</string>
+    <string name="permission_needed">ローカル音楽をスキャンするには音声アクセスが必要です</string>
+
+    <string name="shortcut_search_short">検索</string>
+    <string name="shortcut_search_long">YouTube Musicを検索</string>
+    <string name="shortcut_queue_short">キュー</string>
+    <string name="shortcut_queue_long">再生キューを開く</string>
+    <string name="shortcut_liked_short">お気に入り</string>
+    <string name="shortcut_liked_long">お気に入りの曲を開く</string>
+</resources>

@@ -41,6 +41,7 @@ import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.QueueMusic
@@ -50,6 +51,8 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Equalizer
 import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -82,6 +85,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
@@ -90,7 +94,9 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.media3.common.Player
 import coil3.compose.AsyncImage
+import com.tuneplayer.app.R
 import com.tuneplayer.app.data.lyrics.LrcParser
+import com.tuneplayer.app.data.model.LibrarySort
 import com.tuneplayer.app.data.model.Track
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -104,8 +110,7 @@ fun TunePlayerScreen(
     viewModel: TunePlayerViewModel = viewModel(),
 ) {
     val state = viewModel.uiState
-    val context = LocalContext.current
-    val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+    val context = LocalContext.current    val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
         Manifest.permission.READ_MEDIA_AUDIO
     } else {
         Manifest.permission.READ_EXTERNAL_STORAGE
@@ -139,7 +144,7 @@ fun TunePlayerScreen(
             TopAppBar(
                 title = {
                     Text(
-                        text = "TunePlayer",
+                        text = stringResource(R.string.app_name),
                         fontWeight = FontWeight.SemiBold,
                     )
                 },
@@ -182,31 +187,31 @@ fun TunePlayerScreen(
                         selected = selectedTab == 0,
                         onClick = { selectedTab = 0 },
                         icon = { Icon(Icons.Default.LibraryMusic, contentDescription = null) },
-                        label = { Text("Library") },
+                        label = { Text(stringResource(R.string.tab_library)) },
                     )
                     NavigationBarItem(
                         selected = selectedTab == 1,
                         onClick = { selectedTab = 1 },
                         icon = { Icon(Icons.Default.Search, contentDescription = null) },
-                        label = { Text("YouTube") },
+                        label = { Text(stringResource(R.string.tab_youtube)) },
                     )
                     NavigationBarItem(
                         selected = selectedTab == 2,
                         onClick = { selectedTab = 2 },
                         icon = { Icon(Icons.Default.QueueMusic, contentDescription = null) },
-                        label = { Text("Queue") },
+                        label = { Text(stringResource(R.string.tab_queue)) },
                     )
                     NavigationBarItem(
                         selected = selectedTab == 3,
                         onClick = { selectedTab = 3 },
                         icon = { Icon(Icons.Default.Favorite, contentDescription = null) },
-                        label = { Text("Liked") },
+                        label = { Text(stringResource(R.string.tab_liked)) },
                     )
                     NavigationBarItem(
                         selected = selectedTab == 4,
                         onClick = { selectedTab = 4 },
                         icon = { Icon(Icons.Default.Settings, contentDescription = null) },
-                        label = { Text("Settings") },
+                        label = { Text(stringResource(R.string.tab_settings)) },
                     )
                 }
             }
@@ -228,11 +233,17 @@ fun TunePlayerScreen(
 
             when (selectedTab) {
                 0 -> LibraryScreen(
-                    tracks = state.localTracks,
+                    tracks = viewModel.visibleLocalTracks,
                     favoriteIds = state.favoriteIds,
+                    query = state.libraryQuery,
+                    sort = state.librarySort,
+                    sortDescending = state.librarySortDescending,
                     isLoading = state.isLoadingLocal,
                     hasPermission = hasAudioPermission,
                     onRequestPermission = { permissionLauncher.launch(permission) },
+                    onQueryChange = viewModel::updateLibraryQuery,
+                    onSortChange = viewModel::setLibrarySort,
+                    onToggleSortDirection = viewModel::toggleLibrarySortDirection,
                     onPlay = viewModel::play,
                     onPlayNext = viewModel::playNext,
                     onToggleFavorite = viewModel::toggleFavorite,
@@ -322,9 +333,15 @@ fun TunePlayerScreen(
 private fun LibraryScreen(
     tracks: List<Track>,
     favoriteIds: Set<String>,
+    query: String,
+    sort: LibrarySort,
+    sortDescending: Boolean,
     isLoading: Boolean,
     hasPermission: Boolean,
     onRequestPermission: () -> Unit,
+    onQueryChange: (String) -> Unit,
+    onSortChange: (LibrarySort) -> Unit,
+    onToggleSortDirection: () -> Unit,
     onPlay: (Track) -> Unit,
     onPlayNext: (Track) -> Unit,
     onToggleFavorite: (Track) -> Unit,
@@ -336,10 +353,10 @@ private fun LibraryScreen(
             contentAlignment = Alignment.Center,
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("Audio access is required to scan local music.")
+                Text(stringResource(R.string.permission_needed))
                 Spacer(Modifier.height(12.dp))
                 Button(onClick = onRequestPermission) {
-                    Text("Grant access")
+                    Text(stringResource(R.string.action_grant_access))
                 }
             }
         }
@@ -353,21 +370,114 @@ private fun LibraryScreen(
         return
     }
 
-    if (tracks.isEmpty()) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("No local music found.")
+    Column(modifier = Modifier.fillMaxSize()) {
+        LibraryFilterBar(
+            query = query,
+            sort = sort,
+            sortDescending = sortDescending,
+            onQueryChange = onQueryChange,
+            onSortChange = onSortChange,
+            onToggleSortDirection = onToggleSortDirection,
+        )
+        if (tracks.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text(stringResource(R.string.library_empty))
+            }
+            return
         }
-        return
+        TrackList(
+            tracks = tracks,
+            favoriteIds = favoriteIds,
+            onPlay = onPlay,
+            onPlayNext = onPlayNext,
+            onToggleFavorite = onToggleFavorite,
+            onShare = onShare,
+        )
     }
+}
 
-    TrackList(
-        tracks = tracks,
-        favoriteIds = favoriteIds,
-        onPlay = onPlay,
-        onPlayNext = onPlayNext,
-        onToggleFavorite = onToggleFavorite,
-        onShare = onShare,
-    )
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun LibraryFilterBar(
+    query: String,
+    sort: LibrarySort,
+    sortDescending: Boolean,
+    onQueryChange: (String) -> Unit,
+    onSortChange: (LibrarySort) -> Unit,
+    onToggleSortDirection: () -> Unit,
+) {
+    var sortMenuOpen by remember { mutableStateOf(false) }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        OutlinedTextField(
+            value = query,
+            onValueChange = onQueryChange,
+            modifier = Modifier.weight(1f),
+            placeholder = { Text(stringResource(R.string.library_filter_hint)) },
+            singleLine = true,
+            trailingIcon = {
+                if (query.isNotEmpty()) {
+                    IconButton(onClick = { onQueryChange("") }) {
+                        Icon(Icons.Default.Close, contentDescription = "Clear filter")
+                    }
+                }
+            },
+        )
+        Box {
+            IconButton(onClick = { sortMenuOpen = true }) {
+                Icon(Icons.Default.Sort, contentDescription = stringResource(R.string.sort_by_title))
+            }
+            DropdownMenu(
+                expanded = sortMenuOpen,
+                onDismissRequest = { sortMenuOpen = false },
+            ) {
+                LibrarySort.entries.forEach { option ->
+                    DropdownMenuItem(
+                        text = { Text(stringResource(option.labelRes())) },
+                        onClick = {
+                            onSortChange(option)
+                            sortMenuOpen = false
+                        },
+                        trailingIcon = {
+                            if (option == sort) {
+                                Icon(Icons.Default.Check, contentDescription = null)
+                            }
+                        },
+                    )
+                }
+                HorizontalDivider()
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            stringResource(
+                                if (sortDescending) {
+                                    R.string.sort_descending
+                                } else {
+                                    R.string.sort_ascending
+                                },
+                            ),
+                        )
+                    },
+                    onClick = {
+                        onToggleSortDirection()
+                        sortMenuOpen = false
+                    },
+                )
+            }
+        }
+    }
+}
+
+private fun LibrarySort.labelRes(): Int = when (this) {
+    LibrarySort.Title -> R.string.sort_by_title
+    LibrarySort.Artist -> R.string.sort_by_artist
+    LibrarySort.Album -> R.string.sort_by_album
+    LibrarySort.Duration -> R.string.sort_by_duration
 }
 
 @Composable
@@ -388,10 +498,10 @@ private fun FavoritesScreen(
                     modifier = Modifier.size(48.dp),
                 )
                 Spacer(Modifier.height(16.dp))
-                Text("No liked songs yet", style = MaterialTheme.typography.bodyLarge)
+                Text(stringResource(R.string.liked_empty), style = MaterialTheme.typography.bodyLarge)
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "Tap the heart on any song to save it here",
+                    stringResource(R.string.liked_empty_hint),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -429,7 +539,7 @@ private fun YouTubeScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 8.dp),
-            label = { Text("Search YouTube Music") },
+            placeholder = { Text(stringResource(R.string.search_hint)) },
             singleLine = true,
             trailingIcon = {
                 IconButton(onClick = onSearch) {
@@ -446,7 +556,7 @@ private fun YouTubeScreen(
             }
         } else if (results.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("Search for a song, album, or artist.")
+                Text(stringResource(R.string.search_empty))
             }
         } else {
             TrackList(
@@ -539,10 +649,10 @@ private fun TrackRow(
             )
         }
         IconButton(onClick = onPlayNext) {
-            Icon(Icons.Default.PlaylistAdd, contentDescription = "Play next")
+            Icon(Icons.Default.PlaylistAdd, contentDescription = stringResource(R.string.action_play_next))
         }
         IconButton(onClick = onShare) {
-            Icon(Icons.Default.Share, contentDescription = "Share")
+            Icon(Icons.Default.Share, contentDescription = stringResource(R.string.action_share))
         }
     }
 }
@@ -605,7 +715,7 @@ private fun MiniPlayer(
             IconButton(onClick = onTogglePlayPause) {
                 Icon(
                     imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                    contentDescription = if (isPlaying) "Pause" else "Play",
+                    contentDescription = stringResource(if (isPlaying) R.string.action_pause else R.string.action_play),
                 )
             }
         }
@@ -629,11 +739,15 @@ private fun SleepTimerDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Sleep timer") },
+        title = { Text(stringResource(R.string.sleep_timer)) },
         text = {
             Column {
                 Text(
-                    text = if (isActive) "Stops in $currentMinutes min." else "Stops playback after:",
+                    text = if (isActive) {
+                        stringResource(R.string.sleep_timer_active, currentMinutes)
+                    } else {
+                        stringResource(R.string.sleep_timer_prompt)
+                    },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -660,7 +774,7 @@ private fun SleepTimerDialog(
                 if (isActive) {
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        text = "Cancel timer",
+                        text = stringResource(R.string.action_cancel_timer),
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.error,
                         modifier = Modifier
@@ -672,7 +786,7 @@ private fun SleepTimerDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Close") }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_close)) }
         },
     )
 }
@@ -694,9 +808,9 @@ private fun QueueScreen(
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(Icons.Default.LibraryMusic, contentDescription = null, modifier = Modifier.size(48.dp))
                     Spacer(Modifier.height(16.dp))
-                    Text("Queue is empty", style = MaterialTheme.typography.bodyLarge)
+                    Text(stringResource(R.string.queue_empty), style = MaterialTheme.typography.bodyLarge)
                     Spacer(Modifier.height(8.dp))
-                    Text("Add songs to build your queue", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(stringResource(R.string.queue_empty_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         } else {
@@ -717,7 +831,7 @@ private fun QueueScreen(
                     TextButton(onClick = onClear) {
                         Icon(Icons.Default.Delete, contentDescription = null)
                         Spacer(Modifier.width(4.dp))
-                        Text("Clear")
+                        Text(stringResource(R.string.action_clear))
                     }
                 }
                 LazyColumn(
@@ -786,21 +900,21 @@ private fun QueueRow(
         if (isPlaying) {
             Icon(
                 imageVector = Icons.Default.GraphicEq,
-                contentDescription = "Now playing",
+                contentDescription = stringResource(R.string.now_playing),
                 tint = MaterialTheme.colorScheme.primary,
             )
             Spacer(Modifier.width(12.dp))
         }
         Column {
             IconButton(onClick = onMoveUp) {
-                Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Move up")
+                Icon(Icons.Default.KeyboardArrowUp, contentDescription = stringResource(R.string.action_move_up))
             }
             IconButton(onClick = onMoveDown) {
-                Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Move down")
+                Icon(Icons.Default.KeyboardArrowDown, contentDescription = stringResource(R.string.action_move_down))
             }
         }
         IconButton(onClick = onRemove) {
-            Icon(Icons.Default.Close, contentDescription = "Remove from queue")
+            Icon(Icons.Default.Close, contentDescription = stringResource(R.string.action_remove))
         }
     }
 }
@@ -851,7 +965,7 @@ private fun LyricsSheet(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             if (track == null) {
-                Text("Nothing playing", style = MaterialTheme.typography.titleMedium)
+                Text(stringResource(R.string.lyrics_nothing), style = MaterialTheme.typography.titleMedium)
                 return@Column
             }
             Artwork(track = track, size = 120)
@@ -874,14 +988,14 @@ private fun LyricsSheet(
                 IconButton(onClick = onToggleShuffle) {
                     Icon(
                         imageVector = Icons.Default.Shuffle,
-                        contentDescription = "Shuffle",
+                        contentDescription = stringResource(R.string.action_shuffle),
                         tint = if (isShuffleEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 IconButton(onClick = onTogglePlayPause) {
                     Icon(
                         imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                        contentDescription = if (isPlaying) "Pause" else "Play",
+                        contentDescription = stringResource(if (isPlaying) R.string.action_pause else R.string.action_play),
                     )
                 }
                 IconButton(onClick = onCycleRepeat) {
@@ -891,19 +1005,19 @@ private fun LyricsSheet(
                             Player.REPEAT_MODE_ALL -> Icons.Default.Repeat
                             else -> Icons.Default.Repeat
                         },
-                        contentDescription = "Repeat",
+                        contentDescription = stringResource(R.string.action_repeat),
                         tint = if (repeatMode != Player.REPEAT_MODE_OFF) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 IconButton(onClick = { onToggleFavorite(track) }) {
                     Icon(
                         imageVector = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                        contentDescription = "Favorite",
+                        contentDescription = stringResource(R.string.action_favorite),
                         tint = if (isFavorite) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 IconButton(onClick = { onShare(track) }) {
-                    Icon(Icons.Default.Share, contentDescription = "Share")
+                    Icon(Icons.Default.Share, contentDescription = stringResource(R.string.action_share))
                 }
             }
             Spacer(Modifier.height(16.dp))
@@ -919,12 +1033,12 @@ private fun LyricsSheet(
                     modifier = Modifier.verticalScroll(rememberScrollState()),
                 )
                 track.isLocal -> Text(
-                    text = "Lyrics are not available for local files.",
+                    text = stringResource(R.string.lyrics_none_local),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 else -> Text(
-                    text = "No lyrics available for this track.",
+                    text = stringResource(R.string.lyrics_none),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
