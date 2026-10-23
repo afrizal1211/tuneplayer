@@ -29,10 +29,12 @@ fun Track.matchesQuery(query: String): Boolean {
  */
 fun List<Track>.applySort(sort: LibrarySort, descending: Boolean): List<Track> {
     val comparator: Comparator<Track> = when (sort) {
-        LibrarySort.Title -> compareBy(String.CASE_INSENSITIVE_ORDER) { it.title }
-        LibrarySort.Artist -> compareBy(String.CASE_INSENSITIVE_ORDER) { it.artist }
-        LibrarySort.Album -> compareBy(String.CASE_INSENSITIVE_ORDER) { it.album.orEmpty() }
+        LibrarySort.Title -> compareBy(String.CASE_INSENSITIVE_ORDER, { it.title })
+        LibrarySort.Artist -> compareBy(String.CASE_INSENSITIVE_ORDER, { it.artist })
+        LibrarySort.Album -> compareBy(String.CASE_INSENSITIVE_ORDER, { it.album.orEmpty() })
         LibrarySort.Duration -> compareBy { it.durationMs }
     }
-    return if (descending) sortedWith(comparator.reversed()) else sortedWith(comparator)
+    // Title is the stable tie-breaker so equal keys keep a predictable order.
+    val withTieBreak = comparator.thenBy(String.CASE_INSENSITIVE_ORDER) { it.title }
+    return if (descending) sortedWith(withTieBreak.reversed()) else sortedWith(withTieBreak)
 }
