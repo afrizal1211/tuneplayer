@@ -51,7 +51,9 @@ class LrclibLyricsRepository {
                 "duration" to seconds.toString(),
             ),
         )
-        return parseHit(get(url) ?: return null)
+        val body = get(url) ?: return null
+        val obj = runCatching { JSONObject(body) }.getOrNull() ?: return null
+        return parseHit(obj)
     }
 
     private fun bestSearchHit(title: String, artist: String, seconds: Int?): Hit? {

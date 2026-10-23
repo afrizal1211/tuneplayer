@@ -2061,12 +2061,13 @@ private fun LyricsSheet(
                     }
                 }
             }
-            if (lyricsSource != null) {
+            val source = lyricsSource
+            if (source != null) {
                 Spacer(Modifier.height(8.dp))
                 Text(
                     text = stringResource(
                         R.string.lyrics_source,
-                        stringResource(lyricsSource.labelRes()),
+                        stringResource(source.labelRes()),
                     ),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
