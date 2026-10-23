@@ -32,11 +32,13 @@ import com.tuneplayer.app.data.model.matchesQuery
 import com.tuneplayer.app.data.prefs.AppTheme
 import com.tuneplayer.app.data.prefs.FavoriteStore
 import com.tuneplayer.app.data.lyrics.LrcParser
+import com.tuneplayer.app.data.lyrics.LyricsSource
 import com.tuneplayer.app.playback.PlaybackService
 import com.tuneplayer.app.widget.NowPlayingWidget
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 private const val DEFAULT_SLEEP_MINUTES = 30
 
@@ -90,6 +92,7 @@ data class TunePlayerUiState(
     val youtubeSignedIn: Boolean = false,
     val youtubeAudioQuality: YouTubeAudioQuality = YouTubeAudioQuality.High,
     val lyricsOffsetMs: Long = 0L,
+    val lyricsSource: LyricsSource? = null,
 )
 
 class TunePlayerViewModel(application: Application) : AndroidViewModel(application) {
@@ -97,6 +100,7 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
     private val app = application as TunePlayerApp
     private val localRepository = app.localMusicRepository
     private val youTubeRepository = app.youTubeMusicRepository
+    private val lrclibLyricsRepository = app.lrclibLyricsRepository
     private val favoriteStore = app.favoriteStore
     private val playlistStore = app.playlistStore
     private val queueStore = app.queueStore
@@ -1000,20 +1004,61 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     fun loadLyrics() {
-        val videoId = uiState.currentTrack?.videoId ?: run {
-            uiState = uiState.copy(lyrics = null, isLoadingLyrics = false, syncedLyrics = emptyList(), activeLyricIndex = -1)
+        val track = uiState.currentTrack ?: run {
+            uiState = uiState.copy(
+                lyrics = null,
+                isLoadingLyrics = false,
+                syncedLyrics = emptyList(),
+                activeLyricIndex = -1,
+                lyricsSource = null,
+            )
             return
         }
         viewModelScope.launch {
-            uiState = uiState.copy(isLoadingLyrics = true, lyrics = null)
+            uiState = uiState.copy(
+                isLoadingLyrics = true,
+                lyrics = null,
+                syncedLyrics = emptyList(),
+                activeLyricIndex = -1,
+                lyricsSource = null,
+            )
             try {
-                val text = youTubeRepository.fetchLyrics(videoId)
-                val synced = LrcParser.parse(text)
+                val youtubeText = track.videoId?.let { videoId ->
+                    withTimeoutOrNull(6_000L) {
+                        runCatching { youTubeRepository.fetchLyrics(videoId) }.getOrNull()
+                    }
+                }
+                var text = youtubeText
+                var source = if (!text.isNullOrBlank()) LyricsSource.YouTube else null
+                var synced = LrcParser.parse(text)
+
+                // YouTube timedtext is often plain text. LRCLIB can still
+                // supply line timing, so try it whenever we have no LRC.
+                if (synced.isEmpty()) {
+                    val external = withTimeoutOrNull(10_000L) {
+                        runCatching { lrclibLyricsRepository.find(track) }.getOrNull()
+                    }
+                    if (external != null && (text.isNullOrBlank() || external.synced)) {
+                        text = external.text
+                        synced = LrcParser.parse(external.text)
+                        source = external.source
+                    }
+                }
+
+                val active = if (synced.isEmpty()) {
+                    -1
+                } else {
+                    LrcParser.activeIndex(
+                        synced,
+                        (uiState.positionMs - uiState.lyricsOffsetMs).coerceAtLeast(0L),
+                    )
+                }
                 uiState = uiState.copy(
                     isLoadingLyrics = false,
                     lyrics = text,
                     syncedLyrics = synced,
-                    activeLyricIndex = -1,
+                    activeLyricIndex = active,
+                    lyricsSource = source,
                 )
             } catch (cancelled: CancellationException) {
                 throw cancelled
@@ -1023,6 +1068,7 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
                     lyrics = null,
                     syncedLyrics = emptyList(),
                     activeLyricIndex = -1,
+                    lyricsSource = null,
                 )
             }
         }

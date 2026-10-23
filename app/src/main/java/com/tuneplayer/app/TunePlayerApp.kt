@@ -2,6 +2,7 @@ package com.tuneplayer.app
 
 import android.app.Application
 import com.tuneplayer.app.data.local.LocalMusicRepository
+import com.tuneplayer.app.data.lyrics.LrclibLyricsRepository
 import com.tuneplayer.app.data.prefs.FavoriteStore
 import com.tuneplayer.app.data.prefs.SettingsStore
 import com.tuneplayer.app.data.youtube.YouTubeMusicRepository
@@ -39,6 +40,10 @@ class TunePlayerApp : Application() {
                 )
             }
         }
+    }
+
+    val lrclibLyricsRepository: LrclibLyricsRepository by lazy {
+        LrclibLyricsRepository()
     }
 
     val playlistStore: PlaylistStore by lazy {

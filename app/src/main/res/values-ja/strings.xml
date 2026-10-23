@@ -170,4 +170,7 @@
     <string name="lyrics_offset_reset">リセット</string>
     <string name="lyrics_offset_value">%1$s 秒</string>
     <string name="audio_channels_value">%1$d ch</string>
+    <string name="lyrics_source">ソース: %1$s</string>
+    <string name="lyrics_source_youtube">YouTube Music</string>
+    <string name="lyrics_source_lrclib">LRCLIB</string>
 </resources>

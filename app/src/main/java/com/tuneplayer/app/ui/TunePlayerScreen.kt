@@ -133,6 +133,7 @@ import androidx.media3.common.Player
 import coil3.compose.AsyncImage
 import com.tuneplayer.app.R
 import com.tuneplayer.app.data.lyrics.LrcParser
+import com.tuneplayer.app.data.lyrics.LyricsSource
 import com.tuneplayer.app.data.model.AudioInfo
 import com.tuneplayer.app.data.model.LibrarySort
 import com.tuneplayer.app.data.model.Track
@@ -576,6 +577,7 @@ fun TunePlayerScreen(
                 syncedLyrics = state.syncedLyrics,
                 activeLyricIndex = state.activeLyricIndex,
                 lyricsOffsetMs = state.lyricsOffsetMs,
+                lyricsSource = state.lyricsSource,
                 positionMs = state.positionMs,
                 durationMs = state.durationMs,
                 onSeek = viewModel::seekTo,
@@ -1934,6 +1936,7 @@ private fun LyricsSheet(
     syncedLyrics: List<LrcParser.LrcLine>,
     activeLyricIndex: Int,
     lyricsOffsetMs: Long,
+    lyricsSource: LyricsSource?,
     positionMs: Long,
     durationMs: Long,
     onSeek: (Long) -> Unit,
@@ -2058,6 +2061,17 @@ private fun LyricsSheet(
                     }
                 }
             }
+            if (lyricsSource != null) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = stringResource(
+                        R.string.lyrics_source,
+                        stringResource(lyricsSource.labelRes()),
+                    ),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             Spacer(Modifier.height(16.dp))
             when {
                 isLoading -> CircularProgressIndicator()
@@ -2132,7 +2146,8 @@ private fun SeekBarRow(
     }
 }
 
-/** Highlights the line for the current playback position and keeps it in view. */@Composable
+/** Highlights the line for the current playback position and keeps it in view. */
+@Composable
 private fun SyncedLyrics(
     lines: List<LrcParser.LrcLine>,
     activeIndex: Int,
