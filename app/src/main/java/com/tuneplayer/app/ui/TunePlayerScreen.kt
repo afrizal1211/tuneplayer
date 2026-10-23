@@ -1297,7 +1297,7 @@ private fun formatSpeed(speed: Float): String {
     val number = if (speed == speed.toInt().toFloat()) {
         "%.0f".format(speed)
     } else {
-        "%.2f".format(speed)
+        "%.2f".format(speed).trimEnd('0').trimEnd('.')
     }
     return "${number}x"
 }
@@ -1614,12 +1614,11 @@ private fun shareTrack(context: android.content.Context, track: Track) {
         putExtra(android.content.Intent.EXTRA_TEXT, body)
     }
     context.startActivity(
-        android.content.Intent.createChooser(send, "Share track")
+        android.content.Intent.createChooser(send, context.getString(R.string.action_share))
             .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun NowPlayingSheet(
@@ -1771,6 +1770,7 @@ private fun NowPlayingSheet(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun LyricsSheet(
     track: Track?,
