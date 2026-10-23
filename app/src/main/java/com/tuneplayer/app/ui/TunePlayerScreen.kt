@@ -6,8 +6,14 @@ import android.os.Build
 import android.text.format.Formatter
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.Crossfade
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.Crossfade
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
@@ -24,9 +30,12 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -80,6 +89,7 @@ import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -88,7 +98,10 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -120,12 +133,15 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
@@ -739,31 +755,65 @@ private fun LibraryScreen(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             AssistChip(
                 onClick = onShuffleAll,
-                label = { Text(stringResource(R.string.action_shuffle_all)) },
-                leadingIcon = { Icon(Icons.Default.Shuffle, contentDescription = null) },
+                label = {
+                    Text(
+                        stringResource(R.string.action_shuffle_all),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                },
+                leadingIcon = {
+                    Icon(
+                        Icons.Default.Shuffle,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                },
             )
             AssistChip(
                 onClick = onPlayAll,
-                label = { Text(stringResource(R.string.action_play_all)) },
-                leadingIcon = { Icon(Icons.Default.PlayArrow, contentDescription = null) },
+                label = {
+                    Text(
+                        stringResource(R.string.action_play_all),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                },
+                leadingIcon = {
+                    Icon(
+                        Icons.Default.PlayArrow,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                },
             )
         }
+        Spacer(Modifier.height(4.dp))
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                .padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             LibraryGrouping.entries.forEachIndexed { index, option ->
                 FilterChip(
                     selected = groupingIndex == index,
                     onClick = { groupingIndex = index },
-                    label = { Text(stringResource(option.labelRes())) },
+                    label = {
+                        Text(
+                            stringResource(option.labelRes()),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                        selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    ),
                 )
             }
         }
@@ -1709,40 +1759,37 @@ private fun TrackRow(
     val downloadProgress = downloadState.progress[track.id]
     val onDownloadTrack = LocalDownloadTrack.current
     val onRemoveDownload = LocalRemoveDownload.current
-    Row(
+    val isCurrent = LocalNowPlayingId.current == track.id
+    val hapticsEnabled = LocalHapticsEnabled.current
+    val hapticFeedback = LocalHapticFeedback.current
+
+    ListItem(
         modifier = Modifier
             .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
             .clickable(onClick = onPlay)
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Artwork(track = track, size = 48)
-        Spacer(Modifier.width(12.dp))
-        val isCurrent = LocalNowPlayingId.current == track.id
-        Column(modifier = Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (isCurrent) {
-                    Icon(
-                        imageVector = Icons.Default.GraphicEq,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(16.dp),
-                    )
-                    Spacer(Modifier.width(4.dp))
-                }
-                Text(
-                    text = track.title,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = if (isCurrent) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        Color.Unspecified
-                    },
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false),
-                )
-            }
+            .padding(horizontal = 8.dp, vertical = 2.dp),
+        colors = ListItemDefaults.colors(
+            containerColor = if (isCurrent) {
+                MaterialTheme.colorScheme.primaryContainer
+            } else {
+                MaterialTheme.colorScheme.surface
+            },
+        ),
+        headlineContent = {
+            Text(
+                text = track.title,
+                style = MaterialTheme.typography.titleSmall,
+                color = if (isCurrent) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurface
+                },
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        },
+        supportingContent = {
             Text(
                 text = buildString {
                     append(track.artist)
@@ -1756,96 +1803,126 @@ private fun TrackRow(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-        }
-        val hapticsEnabled = LocalHapticsEnabled.current
-        val hapticFeedback = LocalHapticFeedback.current
-        IconButton(
-            onClick = {
-                if (hapticsEnabled) {
-                    hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+        },
+        leadingContent = {
+            Box(modifier = Modifier.size(52.dp)) {
+                Artwork(
+                    track = track,
+                    size = 52,
+                    cornerRadius = 12,
+                    shadowElevation = if (isCurrent) 4 else 0,
+                )
+                if (isCurrent) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                                RoundedCornerShape(12.dp),
+                            ),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.GraphicEq,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
                 }
-                onToggleFavorite()
-            },
-        ) {
-            Icon(
-                imageVector = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                contentDescription = stringResource(
-                    if (isFavorite) R.string.action_unfavorite else R.string.action_favorite_add,
-                ),
-                tint = if (isFavorite) {
-                    MaterialTheme.colorScheme.error
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                },
-            )
-        }
-        if (downloadProgress != null) {
-            CircularProgressIndicator(
-                progress = { downloadProgress },
-                modifier = Modifier.size(18.dp),
-                strokeWidth = 2.dp,
-            )
-            Spacer(Modifier.width(6.dp))
-        }
-        Box {
-            IconButton(onClick = { menuOpen = true }) {
-                Icon(
-                    Icons.Default.MoreVert,
-                    contentDescription = stringResource(R.string.tab_more),
-                )
-            }
-            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.action_play_next)) },
-                    onClick = {
-                        menuOpen = false
-                        onPlayNext()
-                    },
-                    leadingIcon = { Icon(Icons.Default.QueuePlayNext, contentDescription = null) },
-                )
-                if (!track.isLocal) {
-                    val downloaded = track.id in downloadState.downloadedIds
-                    DropdownMenuItem(
-                        text = {
-                            Text(
-                                stringResource(
-                                    when {
-                                        downloaded -> R.string.action_remove_download
-                                        downloadProgress != null -> R.string.action_downloading
-                                        else -> R.string.action_download
-                                    },
-                                ),
-                            )
-                        },
-                        enabled = downloadProgress == null,
-                        onClick = {
-                            menuOpen = false
-                            if (downloaded) {
-                                onRemoveDownload(track)
-                            } else {
-                                onDownloadTrack(track)
-                            }
-                        },
-                        leadingIcon = {
-                            Icon(
-                                if (downloaded) Icons.Default.DownloadDone else Icons.Default.Download,
-                                contentDescription = null,
-                            )
-                        },
-                    )
+                if (downloadProgress != null) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(
+                                MaterialTheme.colorScheme.surface.copy(alpha = 0.8f),
+                                RoundedCornerShape(12.dp),
+                            ),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        CircularProgressIndicator(
+                            progress = { downloadProgress },
+                            modifier = Modifier.size(24.dp),
+                            strokeWidth = 3.dp,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
                 }
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.action_share)) },
-                    onClick = {
-                        menuOpen = false
-                        onShare()
-                    },
-                    leadingIcon = { Icon(Icons.Default.Share, contentDescription = null) },
-                )
             }
-        }
-        trailing?.invoke()
-    }
+        },
+        trailingContent = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(
+                    onClick = {
+                        if (hapticsEnabled) {
+                            hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                        }
+                        onToggleFavorite()
+                    },
+                ) {
+                    AnimatedIcon(isFavorite = isFavorite)
+                }
+                Box {
+                    IconButton(onClick = { menuOpen = true }) {
+                        Icon(
+                            Icons.Default.MoreVert,
+                            contentDescription = stringResource(R.string.tab_more),
+                        )
+                    }
+                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.action_play_next)) },
+                            onClick = {
+                                menuOpen = false
+                                onPlayNext()
+                            },
+                            leadingIcon = { Icon(Icons.Default.QueuePlayNext, contentDescription = null) },
+                        )
+                        if (!track.isLocal) {
+                            val downloaded = track.id in downloadState.downloadedIds
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        stringResource(
+                                            when {
+                                                downloaded -> R.string.action_remove_download
+                                                downloadProgress != null -> R.string.action_downloading
+                                                else -> R.string.action_download
+                                            },
+                                        ),
+                                    )
+                                },
+                                enabled = downloadProgress == null,
+                                onClick = {
+                                    menuOpen = false
+                                    if (downloaded) {
+                                        onRemoveDownload(track)
+                                    } else {
+                                        onDownloadTrack(track)
+                                    }
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        if (downloaded) Icons.Default.DownloadDone else Icons.Default.Download,
+                                        contentDescription = null,
+                                    )
+                                },
+                            )
+                        }
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.action_share)) },
+                            onClick = {
+                                menuOpen = false
+                                onShare()
+                            },
+                            leadingIcon = { Icon(Icons.Default.Share, contentDescription = null) },
+                        )
+                    }
+                }
+                trailing?.invoke()
+            }
+        },
+    )
 }
 
 /** Compact download affordance for cards where a full row menu is too much. */
@@ -1907,49 +1984,84 @@ private fun DownloadsScreen(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 4.dp),
+                .padding(start = 16.dp, end = 8.dp, top = 24.dp, bottom = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = stringResource(R.string.downloads_title_count, tracks.size),
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold,
                 )
+                Spacer(Modifier.height(2.dp))
                 Text(
                     text = stringResource(
                         R.string.downloads_storage,
                         Formatter.formatShortFileSize(context, totalBytes),
                     ),
-                    style = MaterialTheme.typography.labelSmall,
+                    style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            TextButton(onClick = { confirmClear = true }) {
-                Icon(Icons.Default.Delete, contentDescription = null)
-                Spacer(Modifier.width(4.dp))
-                Text(stringResource(R.string.downloads_clear_all))
+            Spacer(Modifier.width(8.dp))
+            IconButton(
+                onClick = { confirmClear = true },
+                modifier = Modifier
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.errorContainer),
+            ) {
+                Icon(
+                    Icons.Default.Delete,
+                    contentDescription = stringResource(R.string.downloads_clear_all),
+                    tint = MaterialTheme.colorScheme.onErrorContainer,
+                )
             }
         }
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             AssistChip(
                 onClick = onShuffleAll,
-                label = { Text(stringResource(R.string.action_shuffle_all)) },
-                leadingIcon = { Icon(Icons.Default.Shuffle, contentDescription = null) },
+                label = {
+                    Text(
+                        stringResource(R.string.action_shuffle_all),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                },
+                leadingIcon = {
+                    Icon(
+                        Icons.Default.Shuffle,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                },
             )
             AssistChip(
                 onClick = onPlayAll,
-                label = { Text(stringResource(R.string.action_play_all)) },
-                leadingIcon = { Icon(Icons.Default.PlayArrow, contentDescription = null) },
+                label = {
+                    Text(
+                        stringResource(R.string.action_play_all),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                },
+                leadingIcon = {
+                    Icon(
+                        Icons.Default.PlayArrow,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                },
             )
         }
+        Spacer(Modifier.height(8.dp))
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = 12.dp),
+            contentPadding = PaddingValues(bottom = 24.dp),
         ) {
             items(items = tracks, key = { it.id }) { track ->
                 TrackRow(
@@ -1960,7 +2072,11 @@ private fun DownloadsScreen(
                     onToggleFavorite = { onToggleFavorite(track) },
                     onShare = { onShare(track) },
                 )
-                HorizontalDivider(modifier = Modifier.padding(start = 72.dp))
+                HorizontalDivider(
+                    modifier = Modifier.padding(start = 76.dp),
+                    thickness = 0.5.dp,
+                    color = MaterialTheme.colorScheme.outlineVariant,
+                )
             }
         }
     }
@@ -2021,6 +2137,7 @@ private fun Artwork(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun MiniPlayer(
     track: Track,
@@ -2036,52 +2153,89 @@ private fun MiniPlayer(
     } else {
         0f
     }
+    val animatedProgress by animateFloatAsState(
+        targetValue = progress,
+        animationSpec = tween(200, easing = LinearEasing),
+        label = "miniProgress",
+    )
+    val playPauseScale by animateFloatAsState(
+        targetValue = if (isPlaying) 1f else 0.88f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessLow,
+        ),
+        label = "miniPlayScale",
+    )
+    val hapticsEnabled = LocalHapticsEnabled.current
+    val hapticFeedback = LocalHapticFeedback.current
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 8.dp, vertical = 4.dp),
     ) {
-        Surface(
-            shape = RoundedCornerShape(20.dp),
-            tonalElevation = 4.dp,
-            shadowElevation = 8.dp,
-            modifier = Modifier.fillMaxWidth(),
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(20.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant),
         ) {
             Column {
                 LinearProgressIndicator(
-                    progress = { progress },
+                    progress = { animatedProgress },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(3.dp),
                     color = MaterialTheme.colorScheme.primary,
-                    trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                    trackColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f),
                 )
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                        .clickable(onClick = onOpenPlayer)
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Box(
                         modifier = Modifier
-                            .clip(RoundedCornerShape(12.dp))
-                            .clickable(onClick = onOpenPlayer),
+                            .size(52.dp)
+                            .clip(RoundedCornerShape(14.dp)),
                     ) {
-                        Artwork(track = track, size = 46, cornerRadius = 12)
+                        Artwork(track = track, size = 52, cornerRadius = 14, shadowElevation = 0)
+                        if (isPlaying) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(
+                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                                        RoundedCornerShape(14.dp),
+                                    ),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.GraphicEq,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(22.dp),
+                                )
+                            }
+                        }
                     }
                     Spacer(Modifier.width(12.dp))
                     Column(
                         modifier = Modifier
                             .weight(1f)
-                            .clickable(onClick = onOpenPlayer),
+                            .widthIn(min = 0.dp),
                     ) {
                         Text(
                             text = track.title,
-                            style = MaterialTheme.typography.bodyMedium,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.basicMarquee(),
                         )
+                        Spacer(Modifier.height(1.dp))
                         Text(
                             text = track.artist,
                             style = MaterialTheme.typography.bodySmall,
@@ -2090,18 +2244,45 @@ private fun MiniPlayer(
                             overflow = TextOverflow.Ellipsis,
                         )
                     }
-                    IconButton(onClick = onTogglePlayPause) {
-                        Icon(
-                            imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                            contentDescription = stringResource(
-                                if (isPlaying) R.string.action_pause else R.string.action_play,
-                            ),
-                        )
+                    IconButton(
+                        onClick = {
+                            if (hapticsEnabled) {
+                                hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                            }
+                            onTogglePlayPause()
+                        },
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .graphicsLayer {
+                                    scaleX = playPauseScale
+                                    scaleY = playPauseScale
+                                },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                contentDescription = stringResource(
+                                    if (isPlaying) R.string.action_pause else R.string.action_play,
+                                ),
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(26.dp),
+                            )
+                        }
                     }
-                    IconButton(onClick = onSkipNext) {
+                    IconButton(
+                        onClick = {
+                            if (hapticsEnabled) {
+                                hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                            }
+                            onSkipNext()
+                        },
+                    ) {
                         Icon(
                             imageVector = Icons.Default.SkipNext,
                             contentDescription = stringResource(R.string.action_skip_next),
+                            modifier = Modifier.size(24.dp),
                         )
                     }
                 }
@@ -2464,226 +2645,326 @@ private fun NowPlayingSheet(
     onOpenQueue: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 24.dp)
-                .padding(bottom = 32.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Artwork(
-                track = track,
-                size = 248,
-                cornerRadius = 20,
-                shadowElevation = 12,
+    val hapticsEnabled = LocalHapticsEnabled.current
+    val hapticFeedback = LocalHapticFeedback.current
+    val playPauseScale by animateFloatAsState(
+        targetValue = if (isPlaying) 1f else 0.9f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessLow,
+        ),
+        label = "playPauseScale",
+    )
+    val iconSize = 28.dp
+    val sideButtonSize = 56.dp
+    val centerButtonSize = 72.dp
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+    ) {
+        Box(modifier = Modifier.fillMaxWidth()) {
+            // Gradient backdrop: primary-tinted top fading into surface.
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
+                                MaterialTheme.colorScheme.surface,
+                            ),
+                            startY = 0f,
+                            endY = 600f,
+                        ),
+                    ),
             )
-            Spacer(Modifier.height(20.dp))
-            Text(
-                text = track.title,
-                style = MaterialTheme.typography.titleLarge,
-                textAlign = TextAlign.Center,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Spacer(Modifier.height(4.dp))
-            Text(
-                text = track.artist,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            val album = track.album?.trim().orEmpty()
-            if (album.isNotEmpty() && !album.equals(track.artist, ignoreCase = true)) {
-                Spacer(Modifier.height(2.dp))
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 24.dp)
+                    .padding(bottom = 32.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                ) {
+                    IconButton(onClick = onDismiss) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = stringResource(R.string.action_close),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                Artwork(
+                    track = track,
+                    size = 264,
+                    cornerRadius = 24,
+                    shadowElevation = 16,
+                )
+                Spacer(Modifier.height(24.dp))
                 Text(
-                    text = album,
-                    style = MaterialTheme.typography.bodySmall,
+                    text = track.title,
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    textAlign = TextAlign.Center,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = track.artist,
+                    style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-            }
-            if (!lyricPreview.isNullOrBlank()) {
-                Spacer(Modifier.height(10.dp))
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .clickable(onClick = onOpenLyrics)
-                        .padding(horizontal = 10.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center,
-                ) {
-                    Icon(
-                        Icons.Default.Subtitles,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp),
-                        tint = MaterialTheme.colorScheme.primary,
-                    )
-                    Spacer(Modifier.width(8.dp))
+                val album = track.album?.trim().orEmpty()
+                if (album.isNotEmpty() && !album.equals(track.artist, ignoreCase = true)) {
+                    Spacer(Modifier.height(3.dp))
                     Text(
-                        text = lyricPreview,
+                        text = album,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.primary,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        textAlign = TextAlign.Center,
                     )
                 }
-            }
-            val bitrateKbps = audioInfo?.bitrateKbps
-            val sampleRateHz = audioInfo?.sampleRateHz
-            val channelCount = audioInfo?.channelCount?.takeIf { it > 0 }
-            val bitrateText = if (bitrateKbps != null) {
-                stringResource(R.string.audio_bitrate_value, bitrateKbps)
-            } else {
-                null
-            }
-            val sampleRateText = if (sampleRateHz != null && sampleRateHz > 0) {
-                val value = if (sampleRateHz % 1000 == 0) {
-                    (sampleRateHz / 1000).toString()
+                if (!lyricPreview.isNullOrBlank()) {
+                    Spacer(Modifier.height(14.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(MaterialTheme.colorScheme.primaryContainer)
+                            .clickable(onClick = onOpenLyrics)
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center,
+                    ) {
+                        Icon(
+                            Icons.Default.Subtitles,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Text(
+                            text = lyricPreview,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            textAlign = TextAlign.Center,
+                        )
+                    }
+                }
+                val bitrateKbps = audioInfo?.bitrateKbps
+                val sampleRateHz = audioInfo?.sampleRateHz
+                val channelCount = audioInfo?.channelCount?.takeIf { it > 0 }
+                val bitrateText = if (bitrateKbps != null) {
+                    stringResource(R.string.audio_bitrate_value, bitrateKbps)
                 } else {
-                    "%.1f".format(sampleRateHz / 1000f)
+                    null
                 }
-                stringResource(R.string.audio_sample_rate_value, value)
-            } else {
-                null
-            }
-            val channelText = channelCount?.let {
-                stringResource(R.string.audio_channels_value, it)
-            }
-            val audioMeta = listOfNotNull(
-                audioInfo?.codec,
-                bitrateText,
-                sampleRateText,
-                channelText,
-            ).joinToString(" · ")
-            if (audioMeta.isNotEmpty()) {
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    text = audioMeta,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                val sampleRateText = if (sampleRateHz != null && sampleRateHz > 0) {
+                    val value = if (sampleRateHz % 1000 == 0) {
+                        (sampleRateHz / 1000).toString()
+                    } else {
+                        "%.1f".format(sampleRateHz / 1000f)
+                    }
+                    stringResource(R.string.audio_sample_rate_value, value)
+                } else {
+                    null
+                }
+                val channelText = channelCount?.let {
+                    stringResource(R.string.audio_channels_value, it)
+                }
+                val audioMeta = listOfNotNull(
+                    audioInfo?.codec,
+                    bitrateText,
+                    sampleRateText,
+                    channelText,
+                ).joinToString(" · ")
+                if (audioMeta.isNotEmpty()) {
+                    Spacer(Modifier.height(14.dp))
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.secondaryContainer,
+                    ) {
+                        Text(
+                            text = audioMeta,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                        )
+                    }
+                }
+                Spacer(Modifier.height(24.dp))
+                SeekBarRow(
+                    positionMs = positionMs,
+                    durationMs = durationMs,
+                    onSeek = onSeek,
                 )
+                Spacer(Modifier.height(20.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    IconButton(onClick = onToggleShuffle) {
+                        Icon(
+                            imageVector = Icons.Default.Shuffle,
+                            contentDescription = stringResource(R.string.action_shuffle),
+                            modifier = Modifier.size(iconSize),
+                            tint = if (isShuffleEnabled) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                        )
+                    }
+                    IconButton(
+                        onClick = onSkipPrevious,
+                        modifier = Modifier.size(sideButtonSize),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.SkipPrevious,
+                            contentDescription = stringResource(R.string.action_skip_previous),
+                            modifier = Modifier.size(34.dp),
+                        )
+                    }
+                    FilledIconButton(
+                        onClick = {
+                            if (hapticsEnabled) {
+                                hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                            }
+                            onTogglePlayPause()
+                        },
+                        modifier = Modifier
+                            .size(centerButtonSize)
+                            .graphicsLayer {
+                                scaleX = playPauseScale
+                                scaleY = playPauseScale
+                            },
+                    ) {
+                        Icon(
+                            imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                            contentDescription = stringResource(
+                                if (isPlaying) R.string.action_pause else R.string.action_play,
+                            ),
+                            modifier = Modifier.size(38.dp),
+                        )
+                    }
+                    IconButton(
+                        onClick = onSkipNext,
+                        modifier = Modifier.size(sideButtonSize),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.SkipNext,
+                            contentDescription = stringResource(R.string.action_skip_next),
+                            modifier = Modifier.size(34.dp),
+                        )
+                    }
+                    IconButton(onClick = onCycleRepeat) {
+                        Icon(
+                            imageVector = if (repeatMode == Player.REPEAT_MODE_ONE) {
+                                Icons.Default.RepeatOne
+                            } else {
+                                Icons.Default.Repeat
+                            },
+                            contentDescription = stringResource(R.string.action_repeat),
+                            modifier = Modifier.size(iconSize),
+                            tint = if (repeatMode != Player.REPEAT_MODE_OFF) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                        )
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    IconButton(
+                        onClick = {
+                            if (hapticsEnabled) {
+                                hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                            }
+                            onToggleFavorite(track)
+                        },
+                    ) {
+                        AnimatedIcon(isFavorite = isFavorite)
+                    }
+                    IconButton(onClick = onOpenLyrics) {
+                        Icon(
+                            imageVector = Icons.Default.Subtitles,
+                            contentDescription = stringResource(R.string.action_lyrics),
+                            modifier = Modifier.size(iconSize),
+                        )
+                    }
+                    DownloadIconButton(track = track)
+                    IconButton(onClick = onOpenQueue) {
+                        Icon(
+                            imageVector = Icons.Default.QueueMusic,
+                            contentDescription = stringResource(R.string.tab_queue),
+                            modifier = Modifier.size(iconSize),
+                        )
+                    }
+                    IconButton(onClick = { onShare(track) }) {
+                        Icon(
+                            imageVector = Icons.Default.Share,
+                            contentDescription = stringResource(R.string.action_share),
+                            modifier = Modifier.size(iconSize),
+                        )
+                    }
+                }
             }
-            Spacer(Modifier.height(20.dp))
-            SeekBarRow(
-                positionMs = positionMs,
-                durationMs = durationMs,
-                onSeek = onSeek,
-            )
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                IconButton(onClick = onToggleShuffle) {
-                    Icon(
-                        imageVector = Icons.Default.Shuffle,
-                        contentDescription = stringResource(R.string.action_shuffle),
-                        tint = if (isShuffleEnabled) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                    )
-                }
-                IconButton(
-                    onClick = onSkipPrevious,
-                    modifier = Modifier.size(48.dp),
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.SkipPrevious,
-                        contentDescription = stringResource(R.string.action_skip_previous),
-                        modifier = Modifier.size(32.dp),
-                    )
-                }
-                FilledIconButton(
-                    onClick = onTogglePlayPause,
-                    modifier = Modifier.size(64.dp),
-                ) {
-                    Icon(
-                        imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                        contentDescription = stringResource(if (isPlaying) R.string.action_pause else R.string.action_play),
-                        modifier = Modifier.size(36.dp),
-                    )
-                }
-                IconButton(
-                    onClick = onSkipNext,
-                    modifier = Modifier.size(48.dp),
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.SkipNext,
-                        contentDescription = stringResource(R.string.action_skip_next),
-                        modifier = Modifier.size(32.dp),
-                    )
-                }
-                IconButton(onClick = onCycleRepeat) {
-                    Icon(
-                        imageVector = if (repeatMode == Player.REPEAT_MODE_ONE) {
-                            Icons.Default.RepeatOne
-                        } else {
-                            Icons.Default.Repeat
-                        },
-                        contentDescription = stringResource(R.string.action_repeat),
-                        tint = if (repeatMode != Player.REPEAT_MODE_OFF) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                    )
-                }
-            }
-            Spacer(Modifier.height(8.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                val hapticsEnabled = LocalHapticsEnabled.current
-                val hapticFeedback = LocalHapticFeedback.current
-                IconButton(
-                    onClick = {
-                        if (hapticsEnabled) {
-                            hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
-                        }
-                        onToggleFavorite(track)
-                    },
-                ) {
-                    Icon(
-                        imageVector = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                        contentDescription = stringResource(
-                            if (isFavorite) R.string.action_unfavorite else R.string.action_favorite_add,
-                        ),
-                        tint = if (isFavorite) {
-                            MaterialTheme.colorScheme.error
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                    )
-                }
-                IconButton(onClick = onOpenLyrics) {
-                    Icon(
-                        imageVector = Icons.Default.Subtitles,
-                        contentDescription = stringResource(R.string.action_lyrics),
-                    )
-                }
-                DownloadIconButton(track = track)
-                IconButton(onClick = onOpenQueue) {
-                    Icon(
-                        imageVector = Icons.Default.QueueMusic,
-                        contentDescription = stringResource(R.string.tab_queue),
-                    )
-                }
-                IconButton(onClick = { onShare(track) }) {
-                    Icon(
-                        imageVector = Icons.Default.Share,
-                        contentDescription = stringResource(R.string.action_share),
-                    )
-                }
+        }
+    }
+}
+
+/** Favorite icon with spring scale + crossfade between filled/outline. */
+@Composable
+private fun AnimatedIcon(isFavorite: Boolean, modifier: Modifier = Modifier) {
+    var animatedIsFavorite by remember { mutableStateOf(isFavorite) }
+    val animatedScale by animateFloatAsState(
+        targetValue = if (animatedIsFavorite) 1f else 0f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessLow,
+        ),
+        label = "favoriteScale",
+    )
+    LaunchedEffect(isFavorite) { animatedIsFavorite = isFavorite }
+    Box(
+        modifier = modifier
+            .size(24.dp)
+            .graphicsLayer {
+                scaleX = animatedScale
+                scaleY = animatedScale
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Crossfade(targetState = animatedIsFavorite, animationSpec = tween(150)) { state ->
+            when (state) {
+                true -> Icon(
+                    imageVector = Icons.Default.Favorite,
+                    contentDescription = stringResource(R.string.action_unfavorite),
+                    tint = MaterialTheme.colorScheme.error,
+                )
+                false -> Icon(
+                    imageVector = Icons.Default.FavoriteBorder,
+                    contentDescription = stringResource(R.string.action_favorite_add),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
     }
@@ -3215,14 +3496,14 @@ private fun EmptyState(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 24.dp),
+            .padding(horizontal = 32.dp),
         contentAlignment = Alignment.Center,
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Surface(
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.primaryContainer,
-                modifier = Modifier.size(76.dp),
+                shape = RoundedCornerShape(24.dp),
+                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
+                modifier = Modifier.size(88.dp),
             ) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
@@ -3231,19 +3512,20 @@ private fun EmptyState(
                     Icon(
                         imageVector = icon,
                         contentDescription = null,
-                        modifier = Modifier.size(34.dp),
+                        modifier = Modifier.size(40.dp),
                         tint = MaterialTheme.colorScheme.onPrimaryContainer,
                     )
                 }
             }
-            Spacer(Modifier.height(18.dp))
+            Spacer(Modifier.height(20.dp))
             Text(
                 text = title,
-                style = MaterialTheme.typography.titleMedium,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold,
                 textAlign = TextAlign.Center,
             )
             if (hint != null) {
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(8.dp))
                 Text(
                     text = hint,
                     style = MaterialTheme.typography.bodyMedium,
@@ -3252,7 +3534,7 @@ private fun EmptyState(
                 )
             }
             if (action != null) {
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(20.dp))
                 action()
             }
         }
