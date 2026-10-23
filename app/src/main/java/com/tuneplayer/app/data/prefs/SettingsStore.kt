@@ -142,6 +142,23 @@ class SettingsStore(context: Context) {
             prefs.edit().putLong(KEY_LYRICS_OFFSET, value.coerceIn(-5_000L, 5_000L)).apply()
         }
 
+    /** Discord gateway presence is opt-in because it needs a user token. */
+    var discordRpcEnabled: Boolean
+        get() = prefs.getBoolean(KEY_DISCORD_ENABLED, false)
+        set(value) {
+            prefs.edit().putBoolean(KEY_DISCORD_ENABLED, value).apply()
+        }
+
+    var discordToken: String?
+        get() = prefs.getString(KEY_DISCORD_TOKEN, null)?.takeIf { it.isNotBlank() }
+        set(value) {
+            prefs.edit().putString(KEY_DISCORD_TOKEN, value?.takeIf { it.isNotBlank() }).apply()
+        }
+
+    fun clearDiscordToken() {
+        prefs.edit().remove(KEY_DISCORD_TOKEN).putBoolean(KEY_DISCORD_ENABLED, false).apply()
+    }
+
     fun clearYouTubeSession() {
         prefs.edit()
             .remove(KEY_YOUTUBE_COOKIE)
@@ -200,6 +217,8 @@ class SettingsStore(context: Context) {
         const val KEY_YOUTUBE_AUTH_USER = "youtube_auth_user"
         const val KEY_YOUTUBE_QUALITY = "youtube_audio_quality"
         const val KEY_LYRICS_OFFSET = "lyrics_offset_ms"
+        const val KEY_DISCORD_ENABLED = "discord_rpc_enabled"
+        const val KEY_DISCORD_TOKEN = "discord_token"
         const val SEP = "\u001F"
         const val SEARCH_HISTORY_LIMIT = 20
     }

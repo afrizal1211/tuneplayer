@@ -3,6 +3,7 @@ package com.tuneplayer.app.ui
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
+import android.text.format.Formatter
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.Crossfade
@@ -66,6 +67,8 @@ import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.QueueMusic
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Share
@@ -112,6 +115,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -213,6 +217,12 @@ fun TunePlayerScreen(
     CompositionLocalProvider(
         LocalHapticsEnabled provides state.hapticsEnabled,
         LocalNowPlayingId provides state.currentTrack?.id,
+        LocalDownloadUiState provides DownloadUiState(
+            downloadedIds = state.downloadedTracks.map { it.id }.toSet(),
+            progress = state.downloadProgress,
+        ),
+        LocalDownloadTrack provides viewModel::downloadTrack,
+        LocalRemoveDownload provides viewModel::removeDownload,
     ) {
     Scaffold(
         topBar = {
@@ -226,6 +236,7 @@ fun TunePlayerScreen(
                         4 -> R.string.tab_history
                         5 -> R.string.tab_playlists
                         6 -> R.string.tab_settings
+                        8 -> R.string.tab_downloads
                         else -> R.string.tab_stats
                     }
                     Text(
@@ -441,7 +452,8 @@ fun TunePlayerScreen(
 
                 3 -> {
                     val favoriteTracks = state.localTracks.filter { it.id in state.favoriteIds } +
-                        state.searchResults.filter { it.id in state.favoriteIds }
+                        state.searchResults.filter { it.id in state.favoriteIds } +
+                        state.downloadedTracks.filter { it.id in state.favoriteIds }
                     FavoritesScreen(
                         tracks = favoriteTracks,
                         favoriteIds = state.favoriteIds,
@@ -509,6 +521,12 @@ fun TunePlayerScreen(
                     onYouTubeLogout = viewModel::disconnectYouTubeAccount,
                     onYouTubeAudioQualityChange = viewModel::setYouTubeAudioQuality,
                     onReloadFromStores = viewModel::reloadFromStores,
+                    discordRpcEnabled = state.discordRpcEnabled,
+                    discordTokenSaved = state.discordTokenSaved,
+                    discordConnected = state.discordConnected,
+                    onDiscordRpcChange = viewModel::setDiscordRpcEnabled,
+                    onDiscordTokenSave = viewModel::saveDiscordToken,
+                    onDiscordTokenRemove = viewModel::removeDiscordToken,
                 )
 
                 7 -> StatsScreen(
@@ -520,6 +538,19 @@ fun TunePlayerScreen(
                     onPlayNext = viewModel::playNext,
                     onToggleFavorite = viewModel::toggleFavorite,
                     onShare = { track -> shareTrack(context, track) },
+                )
+
+                8 -> DownloadsScreen(
+                    tracks = state.downloadedTracks,
+                    totalBytes = state.downloadTotalBytes,
+                    favoriteIds = state.favoriteIds,
+                    onPlay = viewModel::play,
+                    onPlayNext = viewModel::playNext,
+                    onToggleFavorite = viewModel::toggleFavorite,
+                    onShare = { track -> shareTrack(context, track) },
+                    onPlayAll = { viewModel.playTracks(state.downloadedTracks) },
+                    onShuffleAll = { viewModel.shuffleTracks(state.downloadedTracks) },
+                    onClearAll = viewModel::clearDownloads,
                 )
                 }
             }
@@ -538,6 +569,13 @@ fun TunePlayerScreen(
                     label = stringResource(R.string.tab_playlists),
                 ) {
                     selectedTab = 5
+                    showMore = false
+                }
+                MoreSheetItem(
+                    icon = Icons.Default.Download,
+                    label = stringResource(R.string.tab_downloads),
+                ) {
+                    selectedTab = 8
                     showMore = false
                 }
                 MoreSheetItem(
@@ -575,6 +613,7 @@ fun TunePlayerScreen(
                 onCycleRepeat = viewModel::cycleRepeatMode,
                 onToggleFavorite = viewModel::toggleFavorite,
                 onShare = { track -> shareTrack(context, track) },
+                lyricPreview = state.syncedLyrics.getOrNull(state.activeLyricIndex)?.text,
                 onOpenLyrics = {
                     viewModel.loadLyrics()
                     showPlayer = false
@@ -609,6 +648,7 @@ fun TunePlayerScreen(
                 onToggleFavorite = viewModel::toggleFavorite,
                 onShare = { track -> shareTrack(context, track) },
                 onLyricsOffsetChange = viewModel::setLyricsOffsetMs,
+                onRefreshLyrics = viewModel::refreshLyrics,
                 onDismiss = { showLyricsSheet = false },
             )
         }
@@ -1420,6 +1460,7 @@ private fun SearchTopResultCard(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
+            DownloadIconButton(track = track, modifier = Modifier.size(40.dp))
             IconButton(
                 onClick = onToggleFavorite,
                 modifier = Modifier.size(40.dp),
@@ -1661,6 +1702,11 @@ private fun TrackRow(
     onShare: () -> Unit,
     trailing: (@Composable () -> Unit)? = null,
 ) {
+    var menuOpen by remember { mutableStateOf(false) }
+    val downloadState = LocalDownloadUiState.current
+    val downloadProgress = downloadState.progress[track.id]
+    val onDownloadTrack = LocalDownloadTrack.current
+    val onRemoveDownload = LocalRemoveDownload.current
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -1731,16 +1777,212 @@ private fun TrackRow(
                 },
             )
         }
-        IconButton(onClick = onPlayNext) {
-            Icon(
-                Icons.Default.QueuePlayNext,
-                contentDescription = stringResource(R.string.action_play_next),
+        if (downloadProgress != null) {
+            CircularProgressIndicator(
+                progress = { downloadProgress },
+                modifier = Modifier.size(18.dp),
+                strokeWidth = 2.dp,
             )
+            Spacer(Modifier.width(6.dp))
         }
-        IconButton(onClick = onShare) {
-            Icon(Icons.Default.Share, contentDescription = stringResource(R.string.action_share))
+        Box {
+            IconButton(onClick = { menuOpen = true }) {
+                Icon(
+                    Icons.Default.MoreVert,
+                    contentDescription = stringResource(R.string.tab_more),
+                )
+            }
+            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.action_play_next)) },
+                    onClick = {
+                        menuOpen = false
+                        onPlayNext()
+                    },
+                    leadingIcon = { Icon(Icons.Default.QueuePlayNext, contentDescription = null) },
+                )
+                if (!track.isLocal) {
+                    val downloaded = track.id in downloadState.downloadedIds
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                stringResource(
+                                    when {
+                                        downloaded -> R.string.action_remove_download
+                                        downloadProgress != null -> R.string.action_downloading
+                                        else -> R.string.action_download
+                                    },
+                                ),
+                            )
+                        },
+                        enabled = downloadProgress == null,
+                        onClick = {
+                            menuOpen = false
+                            if (downloaded) {
+                                onRemoveDownload(track)
+                            } else {
+                                onDownloadTrack(track)
+                            }
+                        },
+                        leadingIcon = {
+                            Icon(
+                                if (downloaded) Icons.Default.DownloadDone else Icons.Default.Download,
+                                contentDescription = null,
+                            )
+                        },
+                    )
+                }
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.action_share)) },
+                    onClick = {
+                        menuOpen = false
+                        onShare()
+                    },
+                    leadingIcon = { Icon(Icons.Default.Share, contentDescription = null) },
+                )
+            }
         }
         trailing?.invoke()
+    }
+}
+
+/** Compact download affordance for cards where a full row menu is too much. */
+@Composable
+private fun DownloadIconButton(track: Track, modifier: Modifier = Modifier) {
+    if (track.isLocal) return
+    val downloadState = LocalDownloadUiState.current
+    val onDownloadTrack = LocalDownloadTrack.current
+    val progress = downloadState.progress[track.id]
+    val downloaded = track.id in downloadState.downloadedIds
+    IconButton(
+        onClick = { onDownloadTrack(track) },
+        enabled = progress == null && !downloaded,
+        modifier = modifier,
+    ) {
+        when {
+            progress != null -> CircularProgressIndicator(
+                progress = { progress },
+                modifier = Modifier.size(20.dp),
+                strokeWidth = 2.dp,
+            )
+            downloaded -> Icon(
+                Icons.Default.DownloadDone,
+                contentDescription = stringResource(R.string.action_downloaded),
+                tint = MaterialTheme.colorScheme.primary,
+            )
+            else -> Icon(
+                Icons.Default.Download,
+                contentDescription = stringResource(R.string.action_download),
+            )
+        }
+    }
+}
+
+@Composable
+private fun DownloadsScreen(
+    tracks: List<Track>,
+    totalBytes: Long,
+    favoriteIds: Set<String>,
+    onPlay: (Track) -> Unit,
+    onPlayNext: (Track) -> Unit,
+    onToggleFavorite: (Track) -> Unit,
+    onShare: (Track) -> Unit,
+    onPlayAll: () -> Unit,
+    onShuffleAll: () -> Unit,
+    onClearAll: () -> Unit,
+) {
+    var confirmClear by remember { mutableStateOf(false) }
+    if (tracks.isEmpty()) {
+        EmptyState(
+            icon = Icons.Default.Download,
+            title = stringResource(R.string.downloads_empty),
+            hint = stringResource(R.string.downloads_empty_hint),
+        )
+        return
+    }
+    val context = LocalContext.current
+    Column(modifier = Modifier.fillMaxSize()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.downloads_title_count, tracks.size),
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Text(
+                    text = stringResource(
+                        R.string.downloads_storage,
+                        Formatter.formatShortFileSize(context, totalBytes),
+                    ),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            TextButton(onClick = { confirmClear = true }) {
+                Icon(Icons.Default.Delete, contentDescription = null)
+                Spacer(Modifier.width(4.dp))
+                Text(stringResource(R.string.downloads_clear_all))
+            }
+        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            AssistChip(
+                onClick = onShuffleAll,
+                label = { Text(stringResource(R.string.action_shuffle_all)) },
+                leadingIcon = { Icon(Icons.Default.Shuffle, contentDescription = null) },
+            )
+            AssistChip(
+                onClick = onPlayAll,
+                label = { Text(stringResource(R.string.action_play_all)) },
+                leadingIcon = { Icon(Icons.Default.PlayArrow, contentDescription = null) },
+            )
+        }
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(bottom = 12.dp),
+        ) {
+            items(items = tracks, key = { it.id }) { track ->
+                TrackRow(
+                    track = track,
+                    isFavorite = track.id in favoriteIds,
+                    onPlay = { onPlay(track) },
+                    onPlayNext = { onPlayNext(track) },
+                    onToggleFavorite = { onToggleFavorite(track) },
+                    onShare = { onShare(track) },
+                )
+                HorizontalDivider(modifier = Modifier.padding(start = 72.dp))
+            }
+        }
+    }
+    if (confirmClear) {
+        AlertDialog(
+            onDismissRequest = { confirmClear = false },
+            title = { Text(stringResource(R.string.downloads_clear_all)) },
+            text = { Text(stringResource(R.string.downloads_clear_confirm)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirmClear = false
+                        onClearAll()
+                    },
+                ) {
+                    Text(stringResource(R.string.downloads_clear_all))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmClear = false }) {
+                    Text(stringResource(R.string.action_cancel))
+                }
+            },
+        )
     }
 }
 
@@ -1978,6 +2220,15 @@ private val LocalHapticsEnabled = staticCompositionLocalOf { true }
 /** Lets list rows highlight the track that is actually playing. */
 private val LocalNowPlayingId = staticCompositionLocalOf<String?> { null }
 
+private data class DownloadUiState(
+    val downloadedIds: Set<String> = emptySet(),
+    val progress: Map<String, Float> = emptyMap(),
+)
+
+private val LocalDownloadUiState = compositionLocalOf { DownloadUiState() }
+private val LocalDownloadTrack = compositionLocalOf<(Track) -> Unit> { {} }
+private val LocalRemoveDownload = compositionLocalOf<(Track) -> Unit> { {} }
+
 @Composable
 private fun QueueScreen(
     queue: List<Track>,
@@ -2206,6 +2457,7 @@ private fun NowPlayingSheet(
     onCycleRepeat: () -> Unit,
     onToggleFavorite: (Track) -> Unit,
     onShare: (Track) -> Unit,
+    lyricPreview: String?,
     onOpenLyrics: () -> Unit,
     onOpenQueue: () -> Unit,
     onDismiss: () -> Unit,
@@ -2251,6 +2503,34 @@ private fun NowPlayingSheet(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
+            }
+            if (!lyricPreview.isNullOrBlank()) {
+                Spacer(Modifier.height(10.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable(onClick = onOpenLyrics)
+                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center,
+                ) {
+                    Icon(
+                        Icons.Default.Subtitles,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = lyricPreview,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        textAlign = TextAlign.Center,
+                    )
+                }
             }
             val bitrateKbps = audioInfo?.bitrateKbps
             val sampleRateHz = audioInfo?.sampleRateHz
@@ -2389,6 +2669,7 @@ private fun NowPlayingSheet(
                         contentDescription = stringResource(R.string.action_lyrics),
                     )
                 }
+                DownloadIconButton(track = track)
                 IconButton(onClick = onOpenQueue) {
                     Icon(
                         imageVector = Icons.Default.QueueMusic,
@@ -2429,6 +2710,7 @@ private fun LyricsSheet(
     onToggleFavorite: (Track) -> Unit,
     onShare: (Track) -> Unit,
     onLyricsOffsetChange: (Long) -> Unit,
+    onRefreshLyrics: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
@@ -2545,18 +2827,31 @@ private fun LyricsSheet(
                 }
             }
             val source = lyricsSource
-            if (source != null) {
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    text = stringResource(
-                        R.string.lyrics_source,
-                        stringResource(source.labelRes()),
-                    ),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+            Spacer(Modifier.height(4.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (source != null) {
+                    Text(
+                        text = stringResource(
+                            R.string.lyrics_source,
+                            stringResource(source.labelRes()),
+                        ),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                IconButton(
+                    onClick = onRefreshLyrics,
+                    enabled = !isLoading,
+                    modifier = Modifier.size(32.dp),
+                ) {
+                    Icon(
+                        Icons.Default.Refresh,
+                        contentDescription = stringResource(R.string.lyrics_refresh),
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
             }
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(12.dp))
             when {
                 isLoading -> CircularProgressIndicator()
                 syncedLyrics.isNotEmpty() -> SyncedLyrics(

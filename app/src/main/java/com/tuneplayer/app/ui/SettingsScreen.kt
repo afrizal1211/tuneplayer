@@ -22,6 +22,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -35,6 +36,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.tuneplayer.app.R
 import com.tuneplayer.app.data.backup.BackupManager
@@ -73,9 +75,17 @@ fun SettingsScreen(
     onYouTubeLogout: () -> Unit,
     onYouTubeAudioQualityChange: (YouTubeAudioQuality) -> Unit,
     onReloadFromStores: () -> Unit,
+    discordRpcEnabled: Boolean,
+    discordTokenSaved: Boolean,
+    discordConnected: Boolean,
+    onDiscordRpcChange: (Boolean) -> Unit,
+    onDiscordTokenSave: (String) -> Unit,
+    onDiscordTokenRemove: () -> Unit,
 ) {
     var showLogs by remember { mutableStateOf(false) }
     var showYouTubeLogin by remember { mutableStateOf(false) }
+    var showDiscordToken by remember { mutableStateOf(false) }
+    var discordTokenInput by remember { mutableStateOf("") }
     var backupStatus by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
     val exportLauncher = rememberLauncherForActivityResult(
@@ -203,6 +213,70 @@ fun SettingsScreen(
             text = stringResource(R.string.settings_audio_quality_summary),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+
+        Spacer(Modifier.height(24.dp))
+        SettingsSectionTitle(stringResource(R.string.settings_discord))
+        SettingsToggleRow(
+            label = stringResource(R.string.settings_discord_enabled),
+            checked = discordRpcEnabled,
+            onCheckedChange = { checked ->
+                if (checked && !discordTokenSaved) {
+                    showDiscordToken = true
+                } else {
+                    onDiscordRpcChange(checked)
+                }
+            },
+        )
+        Text(
+            text = stringResource(R.string.settings_discord_summary),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = stringResource(
+                    when {
+                        !discordRpcEnabled -> R.string.settings_discord_status_disabled
+                        discordConnected -> R.string.settings_discord_status_connected
+                        discordTokenSaved -> R.string.settings_discord_status_connecting
+                        else -> R.string.settings_discord_status_no_token
+                    },
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = if (discordConnected) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+                modifier = Modifier.weight(1f),
+            )
+            TextButton(onClick = { showDiscordToken = true }) {
+                Text(
+                    stringResource(
+                        if (discordTokenSaved) {
+                            R.string.settings_discord_update_token
+                        } else {
+                            R.string.settings_discord_set_token
+                        },
+                    ),
+                )
+            }
+            if (discordTokenSaved) {
+                TextButton(onClick = onDiscordTokenRemove) {
+                    Text(stringResource(R.string.settings_discord_remove_token))
+                }
+            }
+        }
+        Text(
+            text = stringResource(R.string.settings_discord_token_warning),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.error,
         )
 
         Spacer(Modifier.height(24.dp))
@@ -359,6 +433,57 @@ fun SettingsScreen(
             onAuthenticated = { cookie ->
                 onYouTubeLogin(cookie)
                 showYouTubeLogin = false
+            },
+        )
+    }
+
+    if (showDiscordToken) {
+        AlertDialog(
+            onDismissRequest = {
+                showDiscordToken = false
+                discordTokenInput = ""
+            },
+            title = { Text(stringResource(R.string.discord_token_title)) },
+            text = {
+                Column {
+                    Text(
+                        text = stringResource(R.string.discord_token_summary),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = discordTokenInput,
+                        onValueChange = { discordTokenInput = it },
+                        label = { Text(stringResource(R.string.discord_token_hint)) },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = discordTokenInput.isNotBlank(),
+                    onClick = {
+                        val token = discordTokenInput
+                        discordTokenInput = ""
+                        showDiscordToken = false
+                        onDiscordTokenSave(token)
+                    },
+                ) {
+                    Text(stringResource(R.string.action_save))
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showDiscordToken = false
+                        discordTokenInput = ""
+                    },
+                ) {
+                    Text(stringResource(R.string.action_cancel))
+                }
             },
         )
     }

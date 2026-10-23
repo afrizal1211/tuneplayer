@@ -182,4 +182,34 @@
     <string name="search_for_query">Search for “%1$s”</string>
     <string name="search_fill_suggestion">Use suggestion</string>
     <string name="action_clear_search">Clear search</string>
+
+    <string name="tab_downloads">Downloads</string>
+    <string name="action_download">Download</string>
+    <string name="action_downloading">Downloading…</string>
+    <string name="action_downloaded">Downloaded</string>
+    <string name="action_remove_download">Remove download</string>
+    <string name="action_save">Save</string>
+    <string name="download_failed">Download failed. Try again.</string>
+    <string name="downloads_empty">No downloads yet</string>
+    <string name="downloads_empty_hint">Use a song menu to save audio for offline listening.</string>
+    <string name="downloads_title_count">Downloads (%1$d)</string>
+    <string name="downloads_storage">Offline audio · %1$s</string>
+    <string name="downloads_clear_all">Delete all</string>
+    <string name="downloads_clear_confirm">Delete every downloaded audio file?</string>
+    <string name="settings_discord">Discord Rich Presence</string>
+    <string name="settings_discord_enabled">Show listening activity</string>
+    <string name="settings_discord_summary">Publish the current track to your Discord profile while TunePlayer is running.</string>
+    <string name="settings_discord_status_disabled">Off</string>
+    <string name="settings_discord_status_connected">Connected</string>
+    <string name="settings_discord_status_connecting">Connecting…</string>
+    <string name="settings_discord_status_no_token">No token</string>
+    <string name="settings_discord_set_token">Set token</string>
+    <string name="settings_discord_update_token">Update token</string>
+    <string name="settings_discord_remove_token">Remove token</string>
+    <string name="settings_discord_token_warning">User tokens are sensitive. Anyone with this token can access your account, so never share it.</string>
+    <string name="discord_token_title">Discord user token</string>
+    <string name="discord_token_summary">Paste a token from your own Discord account. It is stored only on this device and left out of backups.</string>
+    <string name="discord_token_hint">Token</string>
+    <string name="discord_state_paused">Paused · %1$s</string>
+    <string name="lyrics_refresh">Refresh lyrics</string>
 </resources>

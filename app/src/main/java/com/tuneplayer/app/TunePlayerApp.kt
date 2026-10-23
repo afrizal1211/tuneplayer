@@ -1,8 +1,11 @@
 package com.tuneplayer.app
 
 import android.app.Application
+import com.tuneplayer.app.data.discord.DiscordRpcClient
+import com.tuneplayer.app.data.downloads.OfflineDownloadManager
 import com.tuneplayer.app.data.local.LocalMusicRepository
 import com.tuneplayer.app.data.lyrics.LrclibLyricsRepository
+import com.tuneplayer.app.data.lyrics.LyricsCache
 import com.tuneplayer.app.data.prefs.FavoriteStore
 import com.tuneplayer.app.data.prefs.SettingsStore
 import com.tuneplayer.app.data.youtube.YouTubeMusicRepository
@@ -16,6 +19,11 @@ class TunePlayerApp : Application() {
         // First thing in the process: uncaught exceptions land in the log
         // buffer the Diagnostics screen reads, instead of vanishing.
         LogCatcher.install()
+    }
+
+    override fun onCreate() {
+        super.onCreate()
+        syncDiscordRpc()
     }
 
     val localMusicRepository: LocalMusicRepository by lazy {
@@ -44,6 +52,29 @@ class TunePlayerApp : Application() {
 
     val lrclibLyricsRepository: LrclibLyricsRepository by lazy {
         LrclibLyricsRepository()
+    }
+
+    val lyricsCache: LyricsCache by lazy {
+        LyricsCache(this)
+    }
+
+    val offlineDownloadManager: OfflineDownloadManager by lazy {
+        OfflineDownloadManager(this, youTubeMusicRepository)
+    }
+
+    val discordRpcClient: DiscordRpcClient by lazy {
+        DiscordRpcClient()
+    }
+
+    /** Applies the toggle/token pair to the live gateway client. */
+    fun syncDiscordRpc() {
+        val enabled = settingsStore.discordRpcEnabled
+        val token = settingsStore.discordToken
+        if (enabled && token != null) {
+            discordRpcClient.start(token)
+        } else {
+            discordRpcClient.stop()
+        }
     }
 
     val playlistStore: PlaylistStore by lazy {

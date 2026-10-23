@@ -182,4 +182,34 @@
     <string name="search_for_query">「%1$s」を検索</string>
     <string name="search_fill_suggestion">候補を使用</string>
     <string name="action_clear_search">検索をクリア</string>
+
+    <string name="tab_downloads">ダウンロード</string>
+    <string name="action_download">ダウンロード</string>
+    <string name="action_downloading">ダウンロード中…</string>
+    <string name="action_downloaded">ダウンロード済み</string>
+    <string name="action_remove_download">ダウンロードを削除</string>
+    <string name="action_save">保存</string>
+    <string name="download_failed">ダウンロードに失敗しました。もう一度お試しください。</string>
+    <string name="downloads_empty">ダウンロードはまだありません</string>
+    <string name="downloads_empty_hint">曲のメニューからオフライン再生用に保存できます。</string>
+    <string name="downloads_title_count">ダウンロード (%1$d)</string>
+    <string name="downloads_storage">オフライン音声 · %1$s</string>
+    <string name="downloads_clear_all">すべて削除</string>
+    <string name="downloads_clear_confirm">ダウンロードした音声をすべて削除しますか？</string>
+    <string name="settings_discord">Discord Rich Presence</string>
+    <string name="settings_discord_enabled">再生中の曲を表示</string>
+    <string name="settings_discord_summary">TunePlayer の実行中、現在の曲を Discord プロフィールに表示します。</string>
+    <string name="settings_discord_status_disabled">オフ</string>
+    <string name="settings_discord_status_connected">接続済み</string>
+    <string name="settings_discord_status_connecting">接続中…</string>
+    <string name="settings_discord_status_no_token">トークンなし</string>
+    <string name="settings_discord_set_token">トークンを設定</string>
+    <string name="settings_discord_update_token">トークンを更新</string>
+    <string name="settings_discord_remove_token">トークンを削除</string>
+    <string name="settings_discord_token_warning">ユーザートークンは機密情報です。このトークンを持つ人はアカウントにアクセスできるため、絶対に共有しないでください。</string>
+    <string name="discord_token_title">Discord ユーザートークン</string>
+    <string name="discord_token_summary">自分の Discord アカウントのトークンを貼り付けてください。この端末にのみ保存され、バックアップには含まれません。</string>
+    <string name="discord_token_hint">トークン</string>
+    <string name="discord_state_paused">一時停止中 · %1$s</string>
+    <string name="lyrics_refresh">歌詞を再取得</string>
 </resources>

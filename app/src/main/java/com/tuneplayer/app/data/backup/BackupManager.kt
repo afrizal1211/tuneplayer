@@ -25,6 +25,7 @@ object BackupManager {
     private val SENSITIVE_KEYS = setOf(
         "youtube_cookie",
         "youtube_data_sync_id",
+        "discord_token",
     )
 
     /** Everything worth carrying between installs, and nothing transient. */

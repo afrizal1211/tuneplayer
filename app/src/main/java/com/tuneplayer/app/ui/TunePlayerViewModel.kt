@@ -33,6 +33,7 @@ import com.tuneplayer.app.data.youtube.YouTubeSearchFilter
 import com.tuneplayer.app.data.prefs.AppTheme
 import com.tuneplayer.app.data.prefs.FavoriteStore
 import com.tuneplayer.app.data.lyrics.LrcParser
+import com.tuneplayer.app.data.lyrics.LyricsLookup
 import com.tuneplayer.app.data.lyrics.LyricsSource
 import com.tuneplayer.app.playback.PlaybackService
 import com.tuneplayer.app.widget.NowPlayingWidget
@@ -41,6 +42,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import org.json.JSONObject
 
 private const val DEFAULT_SLEEP_MINUTES = 30
 
@@ -103,6 +105,12 @@ data class TunePlayerUiState(
     val youtubeAudioQuality: YouTubeAudioQuality = YouTubeAudioQuality.High,
     val lyricsOffsetMs: Long = 0L,
     val lyricsSource: LyricsSource? = null,
+    val downloadedTracks: List<Track> = emptyList(),
+    val downloadProgress: Map<String, Float> = emptyMap(),
+    val downloadTotalBytes: Long = 0L,
+    val discordRpcEnabled: Boolean = false,
+    val discordTokenSaved: Boolean = false,
+    val discordConnected: Boolean = false,
 )
 
 class TunePlayerViewModel(application: Application) : AndroidViewModel(application) {
@@ -119,6 +127,10 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
     private val playStatsStore = app.playStatsStore
     private val resolvedUris = LinkedHashMap<String, String>()
     private var positionPollJob: kotlinx.coroutines.Job? = null
+    private var lyricsJob: Job? = null
+    private var lyricsTrackId: String? = null
+    private var localLoadCompleted = false
+    private var knownDownloadErrors: Set<String> = emptySet()
 
     var uiState by mutableStateOf(TunePlayerUiState())
         private set
@@ -131,6 +143,7 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
     private var controller: MediaController? = null
 
     init {
+        val offlineState = app.offlineDownloadManager.state.value
         uiState = uiState.copy(
             theme = app.settingsStore.theme,
             equalizerEnabled = app.settingsStore.equalizerEnabled,
@@ -154,7 +167,36 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
             youtubeSignedIn = app.settingsStore.youtubeCookie != null,
             youtubeAudioQuality = app.settingsStore.youtubeAudioQuality,
             lyricsOffsetMs = app.settingsStore.lyricsOffsetMs,
+            downloadedTracks = app.offlineDownloadManager.downloadedTracks(),
+            downloadProgress = offlineState.progress,
+            downloadTotalBytes = app.offlineDownloadManager.totalBytes(),
+            discordRpcEnabled = app.settingsStore.discordRpcEnabled,
+            discordTokenSaved = app.settingsStore.discordToken != null,
         )
+        knownDownloadErrors = offlineState.errors.keys
+        viewModelScope.launch {
+            app.offlineDownloadManager.state.collect { downloads ->
+                val newErrors = downloads.errors.keys - knownDownloadErrors
+                knownDownloadErrors = downloads.errors.keys
+                uiState = uiState.copy(
+                    downloadedTracks = app.offlineDownloadManager.downloadedTracks(),
+                    downloadProgress = downloads.progress,
+                    downloadTotalBytes = app.offlineDownloadManager.totalBytes(),
+                    error = if (newErrors.isNotEmpty()) {
+                        app.getString(R.string.download_failed)
+                    } else {
+                        uiState.error
+                    },
+                )
+                refreshHistoryTracks()
+                maybeRestoreQueue()
+            }
+        }
+        viewModelScope.launch {
+            app.discordRpcClient.connected.collect { connected ->
+                uiState = uiState.copy(discordConnected = connected)
+            }
+        }
         controllerFuture.addListener(
             {
                 runCatching { controllerFuture.get() }
@@ -217,12 +259,16 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
                     isLoadingLocal = false,
                     error = error.message ?: app.getString(R.string.error_local_failed),
                 )
+            } finally {
+                localLoadCompleted = true
+                maybeRestoreQueue()
             }
         }
     }
 
     private fun refreshHistoryTracks() {
-        val known = (uiState.localTracks + uiState.searchResults).associateBy { it.id }
+        val known = (uiState.localTracks + uiState.searchResults + uiState.downloadedTracks)
+            .associateBy { it.id }
         // Ids that no longer resolve are dropped rather than shown as broken rows.
         val resolved = favoriteStore.history.mapNotNull { known[it] }
         uiState = uiState.copy(historyTracks = resolved)
@@ -275,6 +321,7 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
         player.seekTo(target)
         LogCatcher.d(TAG, "seekTo ${target}ms")
         uiState = uiState.copy(positionMs = target)
+        updateDiscordPresence()
     }
 
     /** Mirrors ExoPlayer's own auto-advance (shuffle, repeat-one, next track) into uiState. */
@@ -286,7 +333,9 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
         if (index in uiState.playbackQueue.indices && index != uiState.queueIndex) {
             val track = uiState.playbackQueue[index]
             uiState = uiState.copy(queueIndex = index, currentTrack = track, audioInfo = null)
+            clearLyricsState()
             recordHistory(track.id)
+            prefetchLyrics(track)
             publishWidgetState()
         }
     }
@@ -549,6 +598,11 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     private suspend fun startTrack(track: Track) {
+        val offlineUri = app.offlineDownloadManager.localUri(track.id)
+        if (offlineUri != null) {
+            playResolved(track, offlineUri, null, null)
+            return
+        }
         if (track.isLocal) {
             val mediaUri = track.mediaUri
             if (mediaUri == null) {
@@ -793,9 +847,10 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
         refreshPlaylists()
     }
 
-    /** Resolves playlist ids against the local library plus current search results. */
+    /** Resolves playlist ids against the local library, downloads, and current search results. */
     fun tracksForPlaylist(playlist: PlaylistStore.Playlist): List<Track> {
-        val known = (uiState.localTracks + uiState.searchResults).associateBy { it.id }
+        val known = (uiState.localTracks + uiState.downloadedTracks + uiState.searchResults)
+            .associateBy { it.id }
         return playlist.trackIds.mapNotNull { known[it] }
     }
 
@@ -812,7 +867,8 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
     // ---- Stats ----
 
     fun topTracks(limit: Int = 20): List<Track> {
-        val known = (uiState.localTracks + uiState.searchResults).associateBy { it.id }
+        val known = (uiState.localTracks + uiState.downloadedTracks + uiState.searchResults)
+            .associateBy { it.id }
         return playStatsStore.topIds(limit).mapNotNull { known[it] }
     }
 
@@ -891,7 +947,13 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
             currentTrack = null,
             audioInfo = null,
             isPlaying = false,
+            lyrics = null,
+            syncedLyrics = emptyList(),
+            activeLyricIndex = -1,
+            lyricsSource = null,
+            isLoadingLyrics = false,
         )
+        lyricsJob?.cancel()
         cancelSleepTimer()
         publishWidgetState()
     }
@@ -917,7 +979,7 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
         val player = controller ?: return
         val built = mutableListOf<Pair<MediaItem, Int>>()
         queue.forEachIndexed { index, track ->
-            val uri = track.mediaUri ?: resolvedUris[track.id] ?: return@forEachIndexed
+            val uri = playbackUri(track) ?: return@forEachIndexed
             built += buildMediaItem(track, uri, null) to index
         }
         if (built.isEmpty()) return
@@ -927,6 +989,9 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
         player.setMediaItems(built.map { it.first }, playerStart, 0L)
         persistQueue()
     }
+
+    private fun playbackUri(track: Track): String? =
+        track.mediaUri ?: app.offlineDownloadManager.localUri(track.id) ?: resolvedUris[track.id]
 
     private var restoreAttempted = false
 
@@ -941,7 +1006,14 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
      */
     private fun maybeRestoreQueue() {
         if (restoreAttempted) return
-        if (controller == null || uiState.localTracks.isEmpty()) return
+        if (controller == null) return
+        // Wait for the local scan so file-backed queue entries are not mistaken
+        // for stale ids. A queue made entirely of downloads can restore now.
+        if (!localLoadCompleted) {
+            val pendingIds = queueStore.ids
+            if (pendingIds.isEmpty()) return
+            if (pendingIds.any { app.offlineDownloadManager.localUri(it) == null }) return
+        }
         if (uiState.playbackQueue.isNotEmpty()) {
             // Something is already queued (shortcut, widget). Do not clobber it.
             restoreAttempted = true
@@ -950,7 +1022,8 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
         restoreAttempted = true
         val ids = queueStore.ids
         if (ids.isEmpty()) return
-        val known = (uiState.localTracks + uiState.searchResults).associateBy { it.id }
+        val known = (uiState.localTracks + uiState.searchResults + uiState.downloadedTracks)
+            .associateBy { it.id }
         val queue = ids.mapNotNull { known[it] }
         if (queue.isEmpty()) {
             queueStore.clear()
@@ -966,6 +1039,8 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
         pushQueueToPlayer(queue, index)
         val saved = queueStore.positionMs
         if (saved > 0) controller?.seekTo(saved)
+        prefetchLyrics(queue[index])
+        publishWidgetState()
         LogCatcher.d(TAG, "restored queue: ${queue.size} tracks at $index")
     }
 
@@ -1074,7 +1149,10 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
             youtubeSignedIn = settings.youtubeCookie != null,
             youtubeAudioQuality = settings.youtubeAudioQuality,
             lyricsOffsetMs = settings.lyricsOffsetMs,
+            discordRpcEnabled = settings.discordRpcEnabled,
+            discordTokenSaved = settings.discordToken != null,
         )
+        app.syncDiscordRpc()
         refreshHistoryTracks()
         LogCatcher.d(TAG, "reloaded stores after restore")
     }
@@ -1132,6 +1210,91 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
         uiState = uiState.copy(youtubeAudioQuality = quality)
     }
 
+    // ---- Offline downloads ----
+
+    fun downloadTrack(track: Track) {
+        app.offlineDownloadManager.download(track, uiState.youtubeAudioQuality)
+    }
+
+    fun removeDownload(track: Track) {
+        app.offlineDownloadManager.remove(track.id)
+    }
+
+    fun clearDownloads() {
+        app.offlineDownloadManager.clearAll()
+    }
+
+    // ---- Discord Rich Presence ----
+
+    fun setDiscordRpcEnabled(enabled: Boolean) {
+        app.settingsStore.discordRpcEnabled = enabled
+        uiState = uiState.copy(discordRpcEnabled = enabled)
+        app.syncDiscordRpc()
+        updateDiscordPresence()
+    }
+
+    /** Saving a token also opts in, matching the single dialog that collects it. */
+    fun saveDiscordToken(token: String) {
+        val trimmed = token.trim().removePrefix("Bearer ").trim()
+        if (trimmed.isEmpty()) return
+        app.settingsStore.discordToken = trimmed
+        app.settingsStore.discordRpcEnabled = true
+        uiState = uiState.copy(discordRpcEnabled = true, discordTokenSaved = true)
+        app.syncDiscordRpc()
+        updateDiscordPresence()
+    }
+
+    fun removeDiscordToken() {
+        app.settingsStore.clearDiscordToken()
+        uiState = uiState.copy(
+            discordRpcEnabled = false,
+            discordTokenSaved = false,
+            discordConnected = false,
+        )
+        app.syncDiscordRpc()
+    }
+
+    private fun updateDiscordPresence() {
+        val settings = app.settingsStore
+        if (!settings.discordRpcEnabled || settings.discordToken == null) return
+        val track = uiState.currentTrack
+        if (track == null) {
+            app.discordRpcClient.setActivity(null)
+            return
+        }
+        val appName = app.getString(R.string.app_name).take(MAX_DISCORD_TEXT)
+        val title = track.title.trim().ifBlank { appName }.take(MAX_DISCORD_TEXT)
+        val artist = track.artist.trim()
+            .ifBlank { app.getString(R.string.library_unknown_artist) }
+            .take(MAX_DISCORD_TEXT)
+        val stateText = if (uiState.isPlaying) {
+            artist
+        } else {
+            app.getString(R.string.discord_state_paused, artist).take(MAX_DISCORD_TEXT)
+        }
+        val now = System.currentTimeMillis()
+        val duration = uiState.durationMs
+        val position = uiState.positionMs.coerceAtLeast(0L)
+        val activity = JSONObject().apply {
+            put("name", appName)
+            put("type", 2) // Listening
+            put("details", title)
+            put("state", stateText)
+            put("status_display_type", 2) // Prefer the track title in compact surfaces.
+            if (uiState.isPlaying) {
+                put("timestamps", JSONObject().apply {
+                    put("start", now - position)
+                    if (duration > 0L) {
+                        put("end", now + (duration - position).coerceAtLeast(0L))
+                    }
+                })
+            }
+        }
+        app.discordRpcClient.setActivity(activity)
+    }
+
+    // ---- Lyrics ----
+
     /** Positive values delay lyrics; negative values show them earlier. */
     fun setLyricsOffsetMs(offsetMs: Long) {
         val clamped = offsetMs.coerceIn(-5_000L, 5_000L)
@@ -1150,16 +1313,45 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
 
     fun loadLyrics() {
         val track = uiState.currentTrack ?: run {
-            uiState = uiState.copy(
-                lyrics = null,
-                isLoadingLyrics = false,
-                syncedLyrics = emptyList(),
-                activeLyricIndex = -1,
-                lyricsSource = null,
-            )
+            clearLyricsState()
             return
         }
-        viewModelScope.launch {
+        val cached = app.lyricsCache.get(track.id)
+        if (cached != null) {
+            applyLyrics(track.id, cached)
+            return
+        }
+        fetchLyrics(track, showLoading = true)
+    }
+
+    fun refreshLyrics() {
+        val track = uiState.currentTrack ?: return
+        fetchLyrics(track, showLoading = true, force = true)
+    }
+
+    /** Warms the cache so downloaded tracks still show lyrics without a network. */
+    private fun prefetchLyrics(track: Track) {
+        if (track.isLocal) return
+        val cached = app.lyricsCache.get(track.id)
+        if (cached != null) {
+            if (uiState.currentTrack?.id == track.id && uiState.lyrics == null) {
+                applyLyrics(track.id, cached)
+            }
+            return
+        }
+        fetchLyrics(track, showLoading = false)
+    }
+
+    private fun fetchLyrics(track: Track, showLoading: Boolean, force: Boolean = false) {
+        if (!force && lyricsJob?.isActive == true && lyricsTrackId == track.id) {
+            if (showLoading && !uiState.isLoadingLyrics) {
+                uiState = uiState.copy(isLoadingLyrics = true)
+            }
+            return
+        }
+        lyricsJob?.cancel()
+        lyricsTrackId = track.id
+        if (showLoading) {
             uiState = uiState.copy(
                 isLoadingLyrics = true,
                 lyrics = null,
@@ -1167,61 +1359,107 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
                 activeLyricIndex = -1,
                 lyricsSource = null,
             )
+        }
+        lyricsJob = viewModelScope.launch {
             try {
-                val youtubeText = track.videoId?.let { videoId ->
-                    withTimeoutOrNull(6_000L) {
-                        runCatching { youTubeRepository.fetchLyrics(videoId) }.getOrNull()
+                val lookup = resolveLyrics(track)
+                if (lookup == null) {
+                    if (uiState.currentTrack?.id == track.id) {
+                        uiState = uiState.copy(
+                            isLoadingLyrics = false,
+                            lyrics = null,
+                            syncedLyrics = emptyList(),
+                            activeLyricIndex = -1,
+                            lyricsSource = null,
+                        )
                     }
-                }
-                var text = youtubeText
-                var source = if (!text.isNullOrBlank()) LyricsSource.YouTube else null
-                var synced = LrcParser.parse(text)
-
-                // YouTube timedtext is often plain text. LRCLIB can still
-                // supply line timing, so try it whenever we have no LRC.
-                if (synced.isEmpty()) {
-                    val external = withTimeoutOrNull(10_000L) {
-                        runCatching { lrclibLyricsRepository.find(track) }.getOrNull()
-                    }
-                    if (external != null && (text.isNullOrBlank() || external.synced)) {
-                        text = external.text
-                        synced = LrcParser.parse(external.text)
-                        source = external.source
-                    }
-                }
-
-                val active = if (synced.isEmpty()) {
-                    -1
                 } else {
-                    LrcParser.activeIndex(
-                        synced,
-                        (uiState.positionMs - uiState.lyricsOffsetMs).coerceAtLeast(0L),
-                    )
+                    app.lyricsCache.put(track.id, lookup)
+                    applyLyrics(track.id, lookup)
                 }
-                uiState = uiState.copy(
-                    isLoadingLyrics = false,
-                    lyrics = text,
-                    syncedLyrics = synced,
-                    activeLyricIndex = active,
-                    lyricsSource = source,
-                )
             } catch (cancelled: CancellationException) {
                 throw cancelled
-            } catch (_: Exception) {
-                uiState = uiState.copy(
-                    isLoadingLyrics = false,
-                    lyrics = null,
-                    syncedLyrics = emptyList(),
-                    activeLyricIndex = -1,
-                    lyricsSource = null,
-                )
+            } catch (error: Exception) {
+                LogCatcher.w(TAG, "lyrics lookup failed: ${error.message}")
+                if (uiState.currentTrack?.id == track.id) {
+                    uiState = uiState.copy(isLoadingLyrics = false)
+                }
+            } finally {
+                if (lyricsTrackId == track.id) {
+                    lyricsTrackId = null
+                    lyricsJob = null
+                }
             }
         }
+    }
+
+    private suspend fun resolveLyrics(track: Track): LyricsLookup? {
+        val youtubeText = track.videoId?.let { videoId ->
+            withTimeoutOrNull(6_000L) {
+                runCatching { youTubeRepository.fetchLyrics(videoId) }.getOrNull()
+            }
+        }
+        var text = youtubeText
+        var source = if (!text.isNullOrBlank()) LyricsSource.YouTube else null
+        var synced = LrcParser.parse(text).isNotEmpty()
+
+        // YouTube timedtext is often plain text. LRCLIB can still supply line
+        // timing, so try it whenever we have no LRC.
+        if (!synced) {
+            val external = withTimeoutOrNull(10_000L) {
+                runCatching { lrclibLyricsRepository.find(track) }.getOrNull()
+            }
+            if (external != null && (text.isNullOrBlank() || external.synced)) {
+                text = external.text
+                source = external.source
+                synced = external.synced
+            }
+        }
+        val finalText = text?.takeIf { it.isNotBlank() } ?: return null
+        return LyricsLookup(
+            text = finalText,
+            synced = LrcParser.parse(finalText).isNotEmpty(),
+            source = source ?: LyricsSource.YouTube,
+        )
+    }
+
+    private fun applyLyrics(trackId: String, lookup: LyricsLookup) {
+        if (uiState.currentTrack?.id != trackId) return
+        val synced = LrcParser.parse(lookup.text)
+        val active = if (synced.isEmpty()) {
+            -1
+        } else {
+            LrcParser.activeIndex(
+                synced,
+                (uiState.positionMs - uiState.lyricsOffsetMs).coerceAtLeast(0L),
+            )
+        }
+        uiState = uiState.copy(
+            isLoadingLyrics = false,
+            lyrics = lookup.text,
+            syncedLyrics = synced,
+            activeLyricIndex = active,
+            lyricsSource = lookup.source,
+        )
+    }
+
+    private fun clearLyricsState() {
+        lyricsJob?.cancel()
+        lyricsJob = null
+        lyricsTrackId = null
+        uiState = uiState.copy(
+            isLoadingLyrics = false,
+            lyrics = null,
+            syncedLyrics = emptyList(),
+            activeLyricIndex = -1,
+            lyricsSource = null,
+        )
     }
 
     private fun publishWidgetState() {
         val track = uiState.currentTrack
         NowPlayingWidget.publish(app, track?.title, track?.artist, uiState.isPlaying)
+        updateDiscordPresence()
     }
 
     /**
@@ -1279,6 +1517,7 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
         const val TAG = "TunePlayerVM"
         const val MAX_RESOLVED_CACHE = 50
         const val END_TOLERANCE_MS = 750L
+        const val MAX_DISCORD_TEXT = 128
     }
 
     override fun onCleared() {
@@ -1321,8 +1560,18 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
         }
         player.prepare()
         player.play()
-        uiState = uiState.copy(currentTrack = track, isPlaying = true, audioInfo = info)
+        uiState = uiState.copy(
+            currentTrack = track,
+            isPlaying = true,
+            audioInfo = info,
+            lyrics = null,
+            syncedLyrics = emptyList(),
+            activeLyricIndex = -1,
+            lyricsSource = null,
+            isLoadingLyrics = false,
+        )
         recordHistory(track.id)
+        prefetchLyrics(track)
         publishWidgetState()
     }
 
