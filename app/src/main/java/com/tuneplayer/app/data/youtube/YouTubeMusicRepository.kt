@@ -175,18 +175,16 @@ class YouTubeMusicRepository {
         collectNamedRenderers(response, "musicCardShelfRenderer", cards)
         val topResult = cards.firstOrNull()?.let(::parseCardTopResult)
 
-        // Rows inside a promoted card are related items rather than ordinary
-        // results. Drop them from the list, and drop the promoted song too when
-        // it also appears further down the page.
-        val cardRowIds = if (topResult == null) {
-            emptySet()
-        } else {
-            cards.flatMap { card ->
-                val rows = mutableListOf<JsonObject>()
-                collectRenderersDeep(card, rows)
-                rows.mapNotNull(::parseTrackRenderer).map { it.id }
-            }.toSet()
-        }
+        // An artist card's rows say only "Song • 3:16"; the artist is stated
+        // once on the card. Borrow that credit for those rows, then remove the
+        // promoted song itself so the normal list does not repeat the card.
+        val cardCredits = cards.mapNotNull { card ->
+            val artist = artistCardTitle(card) ?: return@mapNotNull null
+            val rows = mutableListOf<JsonObject>()
+            collectRenderersDeep(card, rows)
+            rows.mapNotNull(::parseTrackRenderer)
+                .map { track -> track.id to artist }
+        }.flatten().toMap()
 
         val renderers = mutableListOf<JsonObject>()
         collectRenderersDeep(response, renderers)
@@ -194,7 +192,8 @@ class YouTubeMusicRepository {
         return YouTubeSearchResults(
             topResult = topResult,
             tracks = renderers.mapNotNull(::parseTrackRenderer)
-                .filterNot { it.id in cardRowIds || it.id == topResult?.id }
+                .map { track -> cardCredits[track.id]?.let { track.copy(artist = it) } ?: track }
+                .filterNot { it.id == topResult?.id }
                 .distinctBy { it.id }
                 .take(30),
         )
@@ -389,6 +388,13 @@ class YouTubeMusicRepository {
             }
             ?.trim()
             ?.takeIf { it.isNotEmpty() }
+    }
+
+    private fun artistCardTitle(card: JsonObject): String? {
+        val tap = card["onTap"] as? JsonObject ?: return null
+        val browse = tap["browseEndpoint"] as? JsonObject ?: return null
+        if (!isArtistEndpoint(browse)) return null
+        return textRuns(card["title"]).takeIf { it.isNotBlank() }
     }
 
     /**
