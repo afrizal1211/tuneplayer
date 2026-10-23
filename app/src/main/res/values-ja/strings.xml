@@ -206,6 +206,8 @@
     <string name="settings_discord_set_token">トークンを設定</string>
     <string name="settings_discord_update_token">トークンを更新</string>
     <string name="settings_discord_remove_token">トークンを削除</string>
+    <string name="settings_discord_show_when_paused">一時停止中も表示</string>
+    <string name="settings_discord_show_when_paused_summary">再生を一時停止してもプロフィールにプレゼンスを表示します。オフの場合は一時停止でカードが消えます。</string>
     <string name="settings_discord_token_warning">ユーザートークンは機密情報です。このトークンを持つ人はアカウントにアクセスできるため、絶対に共有しないでください。</string>
     <string name="discord_token_title">Discord ユーザートークン</string>
     <string name="discord_token_summary">自分の Discord アカウントのトークンを貼り付けてください。この端末にのみ保存され、バックアップには含まれません。</string>

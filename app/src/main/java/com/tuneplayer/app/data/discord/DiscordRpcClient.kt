@@ -202,7 +202,17 @@ class DiscordRpcClient {
 
             OP_HEARTBEAT_ACK -> heartbeatAcked = true
 
-            OP_RECONNECT, OP_INVALID_SESSION -> {
+            OP_RECONNECT -> {
+                LogCatcher.d(TAG, "gateway requested reconnect")
+                ready = false
+                _connected.value = false
+                session?.cancel()
+            }
+
+            OP_INVALID_SESSION -> {
+                // Discord drops presence with its session, so re-identify and
+                // let READY replay the last activity.
+                LogCatcher.d(TAG, "gateway rejected session; re-identifying")
                 ready = false
                 _connected.value = false
                 session?.cancel()
@@ -223,12 +233,19 @@ class DiscordRpcClient {
         val presence = emptyPresence()
         val data = JSONObject().apply {
             put("token", token)
-            put("capabilities", 16381)
+            put("capabilities", IDENTIFY_CAPABILITIES)
             put("compress", false)
+            put("intents", IDENTIFY_INTENTS)
             put("properties", JSONObject().apply {
                 put("os", "Android")
                 put("browser", "TunePlayer")
                 put("device", "Android")
+                put("browser_user_agent", USER_AGENT)
+                put("browser_version", "1.0")
+                put("client_version", "1.0")
+                put("client_build_number", 1)
+                put("native_build_number", 1)
+                put("release_channel", "unknown")
             })
             put("presence", presence)
         }
@@ -238,7 +255,9 @@ class DiscordRpcClient {
     private fun startHeartbeat() {
         heartbeatJob?.cancel()
         heartbeatJob = scope.launch {
-            delay(heartbeatIntervalMs)
+            // Jitter the first beat: sending exactly on the interval tick can
+            // land before the server is ready to ack it.
+            delay((heartbeatIntervalMs * HEARTBEAT_JITTER).toLong())
             while (isActive) {
                 if (!heartbeatAcked) {
                     LogCatcher.w(TAG, "heartbeat timed out")
@@ -299,5 +318,17 @@ class DiscordRpcClient {
         const val MIN_HEARTBEAT_MS = 5_000L
         const val INITIAL_RECONNECT_MS = 3_000L
         const val MAX_RECONNECT_MS = 60_000L
+
+        /** Capability bits, matching the mobile clients that carry presence. */
+        const val IDENTIFY_CAPABILITIES = 16381
+        const val IDENTIFY_INTENTS =
+            (1 shl 12) or (1 shl 18) or (1 shl 19) or (1 shl 22) or
+                (1 shl 23) or (1 shl 27) or (1 shl 28) or (1 shl 29)
+
+        /** Fraction of the heartbeat interval used to jitter the first beat. */
+        const val HEARTBEAT_JITTER = 0.5
+
+        /** Close codes after which a RESUME is pointless; a fresh IDENTIFY is. */
+        val NON_RESUMABLE_CLOSE_CODES = setOf(4004, 4010, 4011, 4012, 4013, 4014)
     }
 }

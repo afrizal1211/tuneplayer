@@ -524,7 +524,9 @@ fun TunePlayerScreen(
                     discordRpcEnabled = state.discordRpcEnabled,
                     discordTokenSaved = state.discordTokenSaved,
                     discordConnected = state.discordConnected,
+                    discordShowWhenPaused = state.discordShowWhenPaused,
                     onDiscordRpcChange = viewModel::setDiscordRpcEnabled,
+                    onDiscordShowWhenPausedChange = viewModel::setDiscordShowWhenPaused,
                     onDiscordTokenSave = viewModel::saveDiscordToken,
                     onDiscordTokenRemove = viewModel::removeDiscordToken,
                 )

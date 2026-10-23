@@ -206,6 +206,8 @@
     <string name="settings_discord_set_token">Set token</string>
     <string name="settings_discord_update_token">Update token</string>
     <string name="settings_discord_remove_token">Remove token</string>
+    <string name="settings_discord_show_when_paused">Show when paused</string>
+    <string name="settings_discord_show_when_paused_summary">Keep the presence card on your profile while playback is paused. When off, the card disappears on pause.</string>
     <string name="settings_discord_token_warning">User tokens are sensitive. Anyone with this token can access your account, so never share it.</string>
     <string name="discord_token_title">Discord user token</string>
     <string name="discord_token_summary">Paste a token from your own Discord account. It is stored only on this device and left out of backups.</string>

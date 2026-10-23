@@ -78,7 +78,9 @@ fun SettingsScreen(
     discordRpcEnabled: Boolean,
     discordTokenSaved: Boolean,
     discordConnected: Boolean,
+    discordShowWhenPaused: Boolean,
     onDiscordRpcChange: (Boolean) -> Unit,
+    onDiscordShowWhenPausedChange: (Boolean) -> Unit,
     onDiscordTokenSave: (String) -> Unit,
     onDiscordTokenRemove: () -> Unit,
 ) {
@@ -272,6 +274,18 @@ fun SettingsScreen(
                     Text(stringResource(R.string.settings_discord_remove_token))
                 }
             }
+        }
+        if (discordRpcEnabled) {
+            SettingsToggleRow(
+                label = stringResource(R.string.settings_discord_show_when_paused),
+                checked = discordShowWhenPaused,
+                onCheckedChange = onDiscordShowWhenPausedChange,
+            )
+            Text(
+                text = stringResource(R.string.settings_discord_show_when_paused_summary),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
         Text(
             text = stringResource(R.string.settings_discord_token_warning),

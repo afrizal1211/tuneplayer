@@ -30,6 +30,14 @@ import com.tuneplayer.app.data.model.YouTubeAudioQuality
 import com.tuneplayer.app.data.model.applySort
 import com.tuneplayer.app.data.model.matchesQuery
 import com.tuneplayer.app.data.youtube.YouTubeSearchFilter
+import com.tuneplayer.app.data.discord.ActiveHoldState
+import com.tuneplayer.app.data.discord.DiscordHoldContext
+import com.tuneplayer.app.data.discord.DiscordPresenceDecision
+import com.tuneplayer.app.data.discord.DiscordPresenceInputs
+import com.tuneplayer.app.data.discord.LastAppliedVisiblePresence
+import com.tuneplayer.app.data.discord.derivePlaybackSemanticState
+import com.tuneplayer.app.data.discord.deriveRawDiscordPresenceDecision
+import com.tuneplayer.app.data.discord.resolveDiscordPresenceDecision
 import com.tuneplayer.app.data.prefs.AppTheme
 import com.tuneplayer.app.data.prefs.FavoriteStore
 import com.tuneplayer.app.data.lyrics.LrcParser
@@ -45,6 +53,9 @@ import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONObject
 
 private const val DEFAULT_SLEEP_MINUTES = 30
+
+/** How long a buffering track may keep the last Discord card before hiding it. */
+private const val DISCORD_HOLD_TIMEOUT_MS = 8_000L
 
 data class TunePlayerUiState(
     val localTracks: List<Track> = emptyList(),
@@ -111,6 +122,7 @@ data class TunePlayerUiState(
     val discordRpcEnabled: Boolean = false,
     val discordTokenSaved: Boolean = false,
     val discordConnected: Boolean = false,
+    val discordShowWhenPaused: Boolean = false,
 )
 
 class TunePlayerViewModel(application: Application) : AndroidViewModel(application) {
@@ -131,6 +143,13 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
     private var lyricsTrackId: String? = null
     private var localLoadCompleted = false
     private var knownDownloadErrors: Set<String> = emptySet()
+
+    /** Buffering hold state for Discord presence; null when nothing is held. */
+    private var discordHold: ActiveHoldState? = null
+    private var lastVisiblePresence: LastAppliedVisiblePresence? = null
+
+    /** Latest ExoPlayer state, used to distinguish pause from buffering. */
+    private var playerPlaybackState: Int = Player.STATE_IDLE
 
     var uiState by mutableStateOf(TunePlayerUiState())
         private set
@@ -172,6 +191,7 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
             downloadTotalBytes = app.offlineDownloadManager.totalBytes(),
             discordRpcEnabled = app.settingsStore.discordRpcEnabled,
             discordTokenSaved = app.settingsStore.discordToken != null,
+            discordShowWhenPaused = app.settingsStore.discordShowWhenPaused,
         )
         knownDownloadErrors = offlineState.errors.keys
         viewModelScope.launch {
@@ -194,7 +214,9 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
         }
         viewModelScope.launch {
             app.discordRpcClient.connected.collect { connected ->
+                val wasConnected = uiState.discordConnected
                 uiState = uiState.copy(discordConnected = connected)
+                if (connected && !wasConnected) updateDiscordPresence()
             }
         }
         controllerFuture.addListener(
@@ -216,6 +238,7 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
                             }
 
                             override fun onPlaybackStateChanged(playbackState: Int) {
+                                playerPlaybackState = playbackState
                                 if (playbackState == Player.STATE_ENDED) advanceAfterTrackEnded()
                             }
 
@@ -955,6 +978,8 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
         )
         lyricsJob?.cancel()
         cancelSleepTimer()
+        discordHold = null
+        lastVisiblePresence = null
         publishWidgetState()
     }
 
@@ -1233,6 +1258,13 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
         updateDiscordPresence()
     }
 
+    /** Keep or drop the card while paused, independent of the enable toggle. */
+    fun setDiscordShowWhenPaused(show: Boolean) {
+        app.settingsStore.discordShowWhenPaused = show
+        uiState = uiState.copy(discordShowWhenPaused = show)
+        updateDiscordPresence()
+    }
+
     /** Saving a token also opts in, matching the single dialog that collects it. */
     fun saveDiscordToken(token: String) {
         val trimmed = token.trim().removePrefix("Bearer ").trim()
@@ -1254,34 +1286,97 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
         app.syncDiscordRpc()
     }
 
+    /**
+     * Applies the playback snapshot to the Discord card.
+     *
+     * The decision comes from [DiscordPresencePolicy]; buffering holds the last
+     * visible card rather than flickering the presence off and back on, and a
+     * stalled stream falls back to a cleared card.
+     */
     private fun updateDiscordPresence() {
         val settings = app.settingsStore
-        if (!settings.discordRpcEnabled || settings.discordToken == null) return
-        val track = uiState.currentTrack
-        if (track == null) {
+        if (!settings.discordRpcEnabled || settings.discordToken == null) {
+            discordHold = null
             app.discordRpcClient.setActivity(null)
             return
         }
+
+        val track = uiState.currentTrack
+        val decision =
+            resolveDiscordPresenceDecision(
+                rawDecision =
+                    deriveRawDiscordPresenceDecision(
+                        input =
+                            DiscordPresenceInputs(
+                                enabled = settings.discordRpcEnabled,
+                                hasToken = settings.discordToken != null,
+                                trackId = track?.id,
+                                isPlaying = uiState.isPlaying,
+                                showWhenPaused = settings.discordShowWhenPaused,
+                                playWhenReady = uiState.isPlaying,
+                                playbackState = playerPlaybackState,
+                            ),
+                        semanticState =
+                            derivePlaybackSemanticState(
+                                DiscordPresenceInputs(
+                                    enabled = settings.discordRpcEnabled,
+                                    hasToken = settings.discordToken != null,
+                                    trackId = track?.id,
+                                    isPlaying = uiState.isPlaying,
+                                    showWhenPaused = settings.discordShowWhenPaused,
+                                    playWhenReady = uiState.isPlaying,
+                                    playbackState = playerPlaybackState,
+                                ),
+                            ),
+                    ),
+                holdContext =
+                    DiscordHoldContext(
+                        nowMs = System.currentTimeMillis(),
+                        activeHoldState = discordHold,
+                        lastAppliedVisiblePresence = lastVisiblePresence,
+                        holdTimeoutMs = DISCORD_HOLD_TIMEOUT_MS,
+                    ),
+            )
+
+        discordHold = decision.nextHoldState
+
+        when (val applied = decision.decision) {
+            is DiscordPresenceDecision.Visible -> {
+                val shown = track ?: return
+                lastVisiblePresence = LastAppliedVisiblePresence(shown.id, applied.mode)
+                app.discordRpcClient.setActivity(buildDiscordActivity(shown, applied.isPaused))
+            }
+
+            is DiscordPresenceDecision.Hold -> Unit
+
+            is DiscordPresenceDecision.Hidden -> {
+                lastVisiblePresence = null
+                app.discordRpcClient.setActivity(null)
+            }
+        }
+    }
+
+    private fun buildDiscordActivity(track: Track, isPaused: Boolean): JSONObject {
         val appName = app.getString(R.string.app_name).take(MAX_DISCORD_TEXT)
         val title = track.title.trim().ifBlank { appName }.take(MAX_DISCORD_TEXT)
         val artist = track.artist.trim()
             .ifBlank { app.getString(R.string.library_unknown_artist) }
             .take(MAX_DISCORD_TEXT)
-        val stateText = if (uiState.isPlaying) {
-            artist
-        } else {
+        val stateText = if (isPaused) {
             app.getString(R.string.discord_state_paused, artist).take(MAX_DISCORD_TEXT)
+        } else {
+            artist
         }
         val now = System.currentTimeMillis()
         val duration = uiState.durationMs
         val position = uiState.positionMs.coerceAtLeast(0L)
-        val activity = JSONObject().apply {
+        return JSONObject().apply {
             put("name", appName)
             put("type", 2) // Listening
             put("details", title)
             put("state", stateText)
             put("status_display_type", 2) // Prefer the track title in compact surfaces.
-            if (uiState.isPlaying) {
+            if (!isPaused) {
                 put("timestamps", JSONObject().apply {
                     put("start", now - position)
                     if (duration > 0L) {
@@ -1290,7 +1385,6 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
                 })
             }
         }
-        app.discordRpcClient.setActivity(activity)
     }
 
     // ---- Lyrics ----
