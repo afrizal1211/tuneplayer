@@ -46,6 +46,7 @@ import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.PlaylistPlay
 import androidx.compose.material.icons.filled.RemoveCircleOutline
 import androidx.compose.material.icons.filled.Search
@@ -59,6 +60,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Equalizer
 import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.ListItem
@@ -69,6 +71,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -154,6 +157,7 @@ fun TunePlayerScreen(
     var selectedTab by rememberSaveable { mutableIntStateOf(initialTab) }
     var showSleepDialog by rememberSaveable { mutableStateOf(false) }
     var showLyricsSheet by rememberSaveable { mutableStateOf(false) }
+    var showMore by rememberSaveable { mutableStateOf(false) }
 
     // Tabs: 0 Library, 1 YouTube, 2 Queue, 3 Liked, 4 History, 5 Playlists, 6 Settings
     val keepScreenOn = state.keepScreenOn
@@ -238,22 +242,10 @@ fun TunePlayerScreen(
                         label = { Text(stringResource(R.string.tab_liked)) },
                     )
                     NavigationBarItem(
-                        selected = selectedTab == 4,
-                        onClick = { selectedTab = 4 },
-                        icon = { Icon(Icons.Default.History, contentDescription = null) },
-                        label = { Text(stringResource(R.string.tab_history)) },
-                    )
-                    NavigationBarItem(
-                        selected = selectedTab == 5,
-                        onClick = { selectedTab = 5 },
-                        icon = { Icon(Icons.Default.PlaylistPlay, contentDescription = null) },
-                        label = { Text(stringResource(R.string.tab_playlists)) },
-                    )
-                    NavigationBarItem(
-                        selected = selectedTab == 6,
-                        onClick = { selectedTab = 6 },
-                        icon = { Icon(Icons.Default.Settings, contentDescription = null) },
-                        label = { Text(stringResource(R.string.tab_settings)) },
+                        selected = selectedTab >= 4,
+                        onClick = { showMore = true },
+                        icon = { Icon(Icons.Default.MoreHoriz, contentDescription = null) },
+                        label = { Text(stringResource(R.string.tab_more)) },
                     )
                 }
             }
@@ -365,7 +357,54 @@ fun TunePlayerScreen(
                     onEqualizerChange = viewModel::updateEqualizer,
                     onKeepScreenOnChange = viewModel::setKeepScreenOn,
                     onHapticsChange = viewModel::setHapticsEnabled,
+                    dynamicColor = state.dynamicColor,
+                    pureBlack = state.pureBlack,
+                    onDynamicColorChange = viewModel::setDynamicColor,
+                    onPureBlackChange = viewModel::setPureBlack,
                 )
+
+                7 -> StatsScreen(
+                    totalPlays = viewModel.totalPlays(),
+                    distinctTracks = viewModel.distinctTracks(),
+                    topTracks = viewModel.topTracks(),
+                    favoriteIds = state.favoriteIds,
+                    onPlay = viewModel::play,
+                    onPlayNext = viewModel::playNext,
+                    onToggleFavorite = viewModel::toggleFavorite,
+                    onShare = { track -> shareTrack(context, track) },
+                )
+            }
+        }
+        if (showMore) {
+            ModalBottomSheet(onDismissRequest = { showMore = false }) {
+                MoreSheetItem(
+                    icon = Icons.Default.History,
+                    label = stringResource(R.string.tab_history),
+                ) {
+                    selectedTab = 4
+                    showMore = false
+                }
+                MoreSheetItem(
+                    icon = Icons.Default.PlaylistPlay,
+                    label = stringResource(R.string.tab_playlists),
+                ) {
+                    selectedTab = 5
+                    showMore = false
+                }
+                MoreSheetItem(
+                    icon = Icons.Default.BarChart,
+                    label = stringResource(R.string.tab_stats),
+                ) {
+                    selectedTab = 7
+                    showMore = false
+                }
+                MoreSheetItem(
+                    icon = Icons.Default.Settings,
+                    label = stringResource(R.string.tab_settings),
+                ) {
+                    selectedTab = 6
+                    showMore = false
+                }
             }
         }
         if (showLyricsSheet) {
@@ -458,6 +497,9 @@ private fun LibraryScreen(
         return
     }
 
+    var groupingIndex by rememberSaveable { mutableIntStateOf(0) }
+    val grouping = LibraryGrouping.entries[groupingIndex]
+
     Column(modifier = Modifier.fillMaxSize()) {
         LibraryFilterBar(
             query = query,
@@ -485,21 +527,131 @@ private fun LibraryScreen(
                 leadingIcon = { Icon(Icons.Default.PlayArrow, contentDescription = null) },
             )
         }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            LibraryGrouping.entries.forEachIndexed { index, option ->
+                FilterChip(
+                    selected = groupingIndex == index,
+                    onClick = { groupingIndex = index },
+                    label = { Text(stringResource(option.labelRes())) },
+                )
+            }
+        }
         if (tracks.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(stringResource(R.string.library_empty))
             }
             return
         }
-        TrackList(
-            tracks = tracks,
-            favoriteIds = favoriteIds,
-            onPlay = onPlay,
-            onPlayNext = onPlayNext,
-            onToggleFavorite = onToggleFavorite,
-            onShare = onShare,
-            grid = gridLayout,
-        )
+        if (grouping == LibraryGrouping.Songs) {
+            TrackList(
+                tracks = tracks,
+                favoriteIds = favoriteIds,
+                onPlay = onPlay,
+                onPlayNext = onPlayNext,
+                onToggleFavorite = onToggleFavorite,
+                onShare = onShare,
+                grid = gridLayout,
+            )
+        } else {
+            GroupedTrackList(
+                tracks = tracks,
+                grouping = grouping,
+                favoriteIds = favoriteIds,
+                onPlay = onPlay,
+                onPlayNext = onPlayNext,
+                onToggleFavorite = onToggleFavorite,
+                onShare = onShare,
+            )
+        }
+    }
+}
+
+private enum class LibraryGrouping { Songs, Albums, Artists }
+
+private fun LibraryGrouping.labelRes(): Int = when (this) {
+    LibraryGrouping.Songs -> R.string.library_group_songs
+    LibraryGrouping.Albums -> R.string.library_group_albums
+    LibraryGrouping.Artists -> R.string.library_group_artists
+}
+
+private fun Track.groupKey(grouping: LibraryGrouping, unknown: String): String = when (grouping) {
+    LibraryGrouping.Albums -> album?.takeIf { it.isNotBlank() } ?: unknown
+    LibraryGrouping.Artists -> artist.takeIf { it.isNotBlank() } ?: unknown
+    LibraryGrouping.Songs -> id
+}
+
+/**
+ * Albums/artists view: one header per group, tracks beneath.
+ *
+ * Groups are sorted by name rather than by the library sort so the section
+ * order stays stable while the tracks inside each section keep that sort.
+ */
+@Composable
+private fun GroupedTrackList(
+    tracks: List<Track>,
+    grouping: LibraryGrouping,
+    favoriteIds: Set<String>,
+    onPlay: (Track) -> Unit,
+    onPlayNext: (Track) -> Unit,
+    onToggleFavorite: (Track) -> Unit,
+    onShare: (Track) -> Unit,
+) {
+    val unknown = stringResource(
+        if (grouping == LibraryGrouping.Albums) {
+            R.string.library_unknown_album
+        } else {
+            R.string.library_unknown_artist
+        },
+    )
+    val groups = remember(tracks, grouping, unknown) {
+        tracks.groupBy { it.groupKey(grouping, unknown) }
+            .toList()
+            .sortedBy { (name, _) -> name.lowercase() }
+    }
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(bottom = 12.dp),
+    ) {
+        groups.forEach { (name, groupTracks) ->
+            item(key = "header:$grouping:$name") {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = name,
+                        style = MaterialTheme.typography.titleSmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(
+                        text = stringResource(R.string.library_group_count, groupTracks.size),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            items(items = groupTracks, key = { it.id }) { track ->
+                TrackRow(
+                    track = track,
+                    isFavorite = track.id in favoriteIds,
+                    onPlay = { onPlay(track) },
+                    onPlayNext = { onPlayNext(track) },
+                    onToggleFavorite = { onToggleFavorite(track) },
+                    onShare = { onShare(track) },
+                )
+                HorizontalDivider(modifier = Modifier.padding(start = 72.dp))
+            }
+        }
     }
 }
 
@@ -1622,4 +1774,109 @@ private fun PlaylistNameDialog(
             TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_close)) }
         },
     )
+}
+
+@Composable
+private fun MoreSheetItem(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    onClick: () -> Unit,
+) {
+    ListItem(
+        headlineContent = { Text(label) },
+        leadingContent = { Icon(icon, contentDescription = null) },
+        modifier = Modifier.clickable(onClick = onClick),
+    )
+}
+
+/**
+ * Listening stats.
+ *
+ * Counts come from [com.tuneplayer.app.data.prefs.PlayStatsStore], resolved against
+ * the loaded library, so a track deleted from disk drops out of the top list
+ * instead of showing a dead row. The raw counts stay; only the display is filtered.
+ */
+@Composable
+private fun StatsScreen(
+    totalPlays: Int,
+    distinctTracks: Int,
+    topTracks: List<Track>,
+    favoriteIds: Set<String>,
+    onPlay: (Track) -> Unit,
+    onPlayNext: (Track) -> Unit,
+    onToggleFavorite: (Track) -> Unit,
+    onShare: (Track) -> Unit,
+) {
+    if (totalPlays == 0) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Icon(
+                    Icons.Default.BarChart,
+                    contentDescription = null,
+                    modifier = Modifier.size(48.dp),
+                )
+                Spacer(Modifier.height(16.dp))
+                Text(stringResource(R.string.stats_empty), style = MaterialTheme.typography.bodyLarge)
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    stringResource(R.string.stats_empty_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        return
+    }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(24.dp),
+        ) {
+            StatCell(stringResource(R.string.stats_total_plays), totalPlays)
+            StatCell(stringResource(R.string.stats_distinct_tracks), distinctTracks)
+        }
+        Text(
+            text = stringResource(R.string.stats_top_tracks),
+            style = MaterialTheme.typography.titleSmall,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+        )
+        if (topTracks.isEmpty()) {
+            // Counts exist but nothing resolves: the files moved or the library
+            // has not been scanned yet.
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text(
+                    stringResource(R.string.stats_empty_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        } else {
+            TrackList(
+                tracks = topTracks,
+                favoriteIds = favoriteIds,
+                onPlay = onPlay,
+                onPlayNext = onPlayNext,
+                onToggleFavorite = onToggleFavorite,
+                onShare = onShare,
+            )
+        }
+    }
+}
+
+@Composable
+private fun StatCell(label: String, value: Int) {
+    Column {
+        Text(
+            text = value.toString(),
+            style = MaterialTheme.typography.headlineSmall,
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
 }

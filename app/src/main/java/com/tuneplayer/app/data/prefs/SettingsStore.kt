@@ -52,6 +52,18 @@ class SettingsStore(context: Context) {
             prefs.edit().putBoolean(KEY_LIBRARY_SORT_DESC, value).apply()
         }
 
+    var dynamicColor: Boolean
+        get() = prefs.getBoolean(KEY_DYNAMIC_COLOR, true)
+        set(value) {
+            prefs.edit().putBoolean(KEY_DYNAMIC_COLOR, value).apply()
+        }
+
+    var pureBlack: Boolean
+        get() = prefs.getBoolean(KEY_PURE_BLACK, false)
+        set(value) {
+            prefs.edit().putBoolean(KEY_PURE_BLACK, value).apply()
+        }
+
     var gridLayout: Boolean
         get() = prefs.getBoolean(KEY_GRID_LAYOUT, false)
         set(value) {
@@ -98,6 +110,8 @@ class SettingsStore(context: Context) {
         const val KEY_LIBRARY_SORT = "library_sort"
         const val KEY_LIBRARY_SORT_DESC = "library_sort_desc"
         const val KEY_GRID_LAYOUT = "grid_layout"
+        const val KEY_DYNAMIC_COLOR = "dynamic_color"
+        const val KEY_PURE_BLACK = "pure_black"
         const val KEY_KEEP_SCREEN_ON = "keep_screen_on"
         const val KEY_HAPTICS = "haptics"
         const val KEY_SEARCH_HISTORY = "search_history"

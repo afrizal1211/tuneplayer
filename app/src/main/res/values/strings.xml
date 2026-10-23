@@ -92,4 +92,20 @@
     <string name="settings_haptics">Haptics</string>
     <string name="sleep_finish_track">Finish current track</string>
     <string name="playlist_empty">No tracks in this playlist.</string>
+    <string name="settings_appearance">Appearance</string>
+    <string name="settings_dynamic_color">Dynamic color (Android 12+)</string>
+    <string name="settings_pure_black">Pure black</string>
+    <string name="tab_more">More</string>
+    <string name="tab_stats">Stats</string>
+    <string name="stats_total_plays">Total plays</string>
+    <string name="stats_distinct_tracks">Tracks played</string>
+    <string name="stats_top_tracks">Most played</string>
+    <string name="stats_empty">No listening data yet.</string>
+    <string name="stats_empty_hint">Play a track and it will appear here.</string>
+    <string name="library_group_songs">Songs</string>
+    <string name="library_group_albums">Albums</string>
+    <string name="library_group_artists">Artists</string>
+    <string name="library_unknown_album">Unknown album</string>
+    <string name="library_unknown_artist">Unknown artist</string>
+    <string name="library_group_count">%1$d songs</string>
 </resources>

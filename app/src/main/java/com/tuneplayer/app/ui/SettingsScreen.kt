@@ -42,10 +42,14 @@ fun SettingsScreen(
     virtualizerLevel: Int,
     keepScreenOn: Boolean,
     hapticsEnabled: Boolean,
+    dynamicColor: Boolean,
+    pureBlack: Boolean,
     onThemeChange: (AppTheme) -> Unit,
     onEqualizerChange: (Boolean, Int, Int) -> Unit,
     onKeepScreenOnChange: (Boolean) -> Unit,
     onHapticsChange: (Boolean) -> Unit,
+    onDynamicColorChange: (Boolean) -> Unit,
+    onPureBlackChange: (Boolean) -> Unit,
 ) {
     var showLogs by remember { mutableStateOf(false) }
     val context = LocalContext.current
@@ -55,7 +59,7 @@ fun SettingsScreen(
             .verticalScroll(rememberScrollState())
             .padding(16.dp),
     ) {
-        SettingsSectionTitle("Appearance")
+        SettingsSectionTitle(stringResource(R.string.settings_appearance))
         AppTheme.entries.forEach { option ->
             Row(
                 modifier = Modifier
@@ -75,6 +79,16 @@ fun SettingsScreen(
                 }
             }
         }
+        SettingsToggleRow(
+            label = stringResource(R.string.settings_dynamic_color),
+            checked = dynamicColor,
+            onCheckedChange = onDynamicColorChange,
+        )
+        SettingsToggleRow(
+            label = stringResource(R.string.settings_pure_black),
+            checked = pureBlack,
+            onCheckedChange = onPureBlackChange,
+        )
 
         Spacer(Modifier.height(24.dp))
         SettingsSectionTitle(stringResource(R.string.settings_playback))

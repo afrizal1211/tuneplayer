@@ -8,10 +8,10 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
-import com.tuneplayer.app.data.prefs.AppTheme
-import com.tuneplayer.app.ui.ThemeController
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import com.tuneplayer.app.data.prefs.AppTheme
+import com.tuneplayer.app.ui.ThemeController
 
 private val LightColors = lightColorScheme(
     primary = Color(0xFF6750A4),
@@ -25,6 +25,23 @@ private val DarkColors = darkColorScheme(
     tertiary = Color(0xFFEFB8C8),
 )
 
+/**
+ * True-black variant for OLED panels.
+ *
+ * Only the base surfaces are forced to black; elevated containers stay at
+ * their Material values so cards and sheets keep a visible edge on black.
+ */
+private val PureBlackColors = darkColorScheme(
+    primary = Color(0xFFD0BCFF),
+    secondary = Color(0xFFCCC2DC),
+    tertiary = Color(0xFFEFB8C8),
+    background = Color.Black,
+    surface = Color.Black,
+    surfaceContainer = Color(0xFF0A0A0A),
+    surfaceContainerHigh = Color(0xFF121212),
+    surfaceContainerHighest = Color(0xFF1A1A1A),
+)
+
 @Composable
 fun TunePlayerTheme(content: @Composable () -> Unit) {
     val darkTheme = when (ThemeController.theme) {
@@ -32,12 +49,16 @@ fun TunePlayerTheme(content: @Composable () -> Unit) {
         AppTheme.Light -> false
         AppTheme.Dark -> true
     }
-    val dynamicColor = ThemeController.theme == AppTheme.System
     val context = LocalContext.current
+    val dynamicAvailable = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+
     val colorScheme = when {
-        Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && dynamicColor && darkTheme ->
+        // Pure black wins over dynamic color: asking for OLED black and
+        // getting a tinted near-black defeats the point.
+        darkTheme && ThemeController.pureBlack -> PureBlackColors
+        dynamicAvailable && ThemeController.dynamicColor && darkTheme ->
             dynamicDarkColorScheme(context)
-        Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && dynamicColor ->
+        dynamicAvailable && ThemeController.dynamicColor ->
             dynamicLightColorScheme(context)
         darkTheme -> DarkColors
         else -> LightColors

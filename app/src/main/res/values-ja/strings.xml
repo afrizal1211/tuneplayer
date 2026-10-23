@@ -92,4 +92,20 @@
     <string name="settings_haptics">触覚フィードバック</string>
     <string name="sleep_finish_track">現在の曲の終了後に停止</string>
     <string name="playlist_empty">このプレイリストには曲がありません。</string>
+    <string name="settings_appearance">外観</string>
+    <string name="settings_dynamic_color">ダイナミックカラー（Android 12以降）</string>
+    <string name="settings_pure_black">純黒テーマ</string>
+    <string name="tab_more">その他</string>
+    <string name="tab_stats">統計</string>
+    <string name="stats_total_plays">総再生回数</string>
+    <string name="stats_distinct_tracks">再生した曲数</string>
+    <string name="stats_top_tracks">よく再生した曲</string>
+    <string name="stats_empty">再生履歴がありません。</string>
+    <string name="stats_empty_hint">曲を再生するとここに表示されます。</string>
+    <string name="library_group_songs">曲</string>
+    <string name="library_group_albums">アルバム</string>
+    <string name="library_group_artists">アーティスト</string>
+    <string name="library_unknown_album">不明なアルバム</string>
+    <string name="library_unknown_artist">不明なアーティスト</string>
+    <string name="library_group_count">%1$d曲</string>
 </resources>

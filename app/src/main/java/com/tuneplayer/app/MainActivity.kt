@@ -35,7 +35,10 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         rememberTab(intent)
-        ThemeController.set((application as TunePlayerApp).settingsStore.theme)
+        val settings = (application as TunePlayerApp).settingsStore
+        ThemeController.set(settings.theme)
+        ThemeController.setDynamicColor(settings.dynamicColor)
+        ThemeController.setPureBlack(settings.pureBlack)
         setContent {
             TunePlayerTheme {
                 val tab by initialTab

@@ -50,6 +50,8 @@ data class TunePlayerUiState(
     val keepScreenOn: Boolean = false,
     val hapticsEnabled: Boolean = true,
     val gridLayout: Boolean = false,
+    val dynamicColor: Boolean = true,
+    val pureBlack: Boolean = false,
     val searchHistory: List<String> = emptyList(),
     val historyTracks: List<Track> = emptyList(),
     val playlists: List<PlaylistStore.Playlist> = emptyList(),
@@ -108,6 +110,8 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
             keepScreenOn = app.settingsStore.keepScreenOn,
             hapticsEnabled = app.settingsStore.hapticsEnabled,
             gridLayout = app.settingsStore.gridLayout,
+            dynamicColor = app.settingsStore.dynamicColor,
+            pureBlack = app.settingsStore.pureBlack,
             searchHistory = app.settingsStore.searchHistory,
             playlists = playlistStore.all(),
         )
@@ -717,6 +721,18 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
         uiState = uiState.copy(theme = theme)
         ThemeController.set(theme)
         app.settingsStore.theme = theme
+    }
+
+    fun setDynamicColor(enabled: Boolean) {
+        app.settingsStore.dynamicColor = enabled
+        ThemeController.setDynamicColor(enabled)
+        uiState = uiState.copy(dynamicColor = enabled)
+    }
+
+    fun setPureBlack(enabled: Boolean) {
+        app.settingsStore.pureBlack = enabled
+        ThemeController.setPureBlack(enabled)
+        uiState = uiState.copy(pureBlack = enabled)
     }
 
     fun updateEqualizer(enabled: Boolean, bass: Int, virtualizer: Int) {
