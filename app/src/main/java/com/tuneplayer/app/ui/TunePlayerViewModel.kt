@@ -29,6 +29,7 @@ import com.tuneplayer.app.data.prefs.FavoriteStore
 import com.tuneplayer.app.data.lyrics.LrcParser
 import com.tuneplayer.app.playback.PlaybackService
 import com.tuneplayer.app.widget.NowPlayingWidget
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -166,19 +167,20 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
     fun loadLocalMusic() {
         viewModelScope.launch {
             uiState = uiState.copy(isLoadingLocal = true, error = null)
-            runCatching { localRepository.loadTracks() }
-                .onSuccess { tracks ->
-                    uiState = uiState.copy(localTracks = tracks, isLoadingLocal = false)
-                    refreshHistoryTracks()
-                    maybeRestoreQueue()
-                }
-                .onFailure { error ->
-                    LogCatcher.e(TAG, "Local music load failed", error)
-                    uiState = uiState.copy(
-                        isLoadingLocal = false,
-                        error = error.message ?: app.getString(R.string.error_local_failed),
-                    )
-                }
+            try {
+                val tracks = localRepository.loadTracks()
+                uiState = uiState.copy(localTracks = tracks, isLoadingLocal = false)
+                refreshHistoryTracks()
+                maybeRestoreQueue()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                LogCatcher.e(TAG, "Local music load failed", error)
+                uiState = uiState.copy(
+                    isLoadingLocal = false,
+                    error = error.message ?: app.getString(R.string.error_local_failed),
+                )
+            }
         }
     }
 
@@ -341,18 +343,20 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
         uiState = uiState.copy(searchHistory = app.settingsStore.searchHistory)
         viewModelScope.launch {
             uiState = uiState.copy(isSearching = true, error = null)
-            runCatching { youTubeRepository.search(query) }
-                .onSuccess { tracks ->
-                    uiState = uiState.copy(searchResults = tracks, isSearching = false)
-                    refreshHistoryTracks()
-                }
-                .onFailure { error ->
-                    LogCatcher.e(TAG, "YouTube search failed", error)
-                    uiState = uiState.copy(
-                        isSearching = false,
-                        error = error.message ?: app.getString(R.string.error_search_failed),
-                    )
-                }
+            try {
+                val tracks = youTubeRepository.search(query)
+                uiState = uiState.copy(searchResults = tracks, isSearching = false)
+                refreshHistoryTracks()
+            } catch (cancelled: CancellationException) {
+                // Leaving the screen is not a search failure.
+                throw cancelled
+            } catch (error: Exception) {
+                LogCatcher.e(TAG, "YouTube search failed", error)
+                uiState = uiState.copy(
+                    isSearching = false,
+                    error = error.message ?: app.getString(R.string.error_search_failed),
+                )
+            }
         }
     }
 
@@ -393,19 +397,20 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
                 return
             }
             uiState = uiState.copy(isSearching = true)
-            runCatching { youTubeRepository.resolveAudio(videoId) }
-                .onSuccess { audio ->
-                    uiState = uiState.copy(isSearching = false)
-                    cacheResolvedUri(track.id, audio.url)
-                    playResolved(track, audio.url, audio.mimeType)
-                }
-                .onFailure { error ->
-                    LogCatcher.e(TAG, "YouTube resolve failed", error)
-                    uiState = uiState.copy(
-                        isSearching = false,
-                        error = error.message ?: app.getString(R.string.error_resolve_failed),
-                    )
-                }
+            try {
+                val audio = youTubeRepository.resolveAudio(videoId)
+                uiState = uiState.copy(isSearching = false)
+                cacheResolvedUri(track.id, audio.url)
+                playResolved(track, audio.url, audio.mimeType)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                LogCatcher.e(TAG, "YouTube resolve failed", error)
+                uiState = uiState.copy(
+                    isSearching = false,
+                    error = error.message ?: app.getString(R.string.error_resolve_failed),
+                )
+            }
         }
     }
 
@@ -855,14 +860,25 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
         }
         viewModelScope.launch {
             uiState = uiState.copy(isLoadingLyrics = true, lyrics = null)
-            val text = runCatching { youTubeRepository.fetchLyrics(videoId) }.getOrNull()
-            val synced = LrcParser.parse(text)
-            uiState = uiState.copy(
-                isLoadingLyrics = false,
-                lyrics = text,
-                syncedLyrics = synced,
-                activeLyricIndex = -1,
-            )
+            try {
+                val text = youTubeRepository.fetchLyrics(videoId)
+                val synced = LrcParser.parse(text)
+                uiState = uiState.copy(
+                    isLoadingLyrics = false,
+                    lyrics = text,
+                    syncedLyrics = synced,
+                    activeLyricIndex = -1,
+                )
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                uiState = uiState.copy(
+                    isLoadingLyrics = false,
+                    lyrics = null,
+                    syncedLyrics = emptyList(),
+                    activeLyricIndex = -1,
+                )
+            }
         }
     }
 
@@ -954,7 +970,9 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
         AudioEffects.release()
         controller?.release()
         MediaController.releaseFuture(controllerFuture)
-        youTubeRepository.close()
+        // The repository is Application-scoped. Closing it here killed the
+        // shared HttpClient on every rotation, and the next search failed
+        // with "Parent job is Completed".
         super.onCleared()
     }
 
