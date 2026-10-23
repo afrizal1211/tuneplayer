@@ -480,6 +480,11 @@ fun TunePlayerScreen(
                     eqPreset = state.eqPreset,
                     onEqBandChange = viewModel::setEqBand,
                     onEqPresetChange = viewModel::setEqPreset,
+                    youtubeSignedIn = state.youtubeSignedIn,
+                    youtubeAudioQuality = state.youtubeAudioQuality,
+                    onYouTubeLogin = viewModel::connectYouTubeAccount,
+                    onYouTubeLogout = viewModel::disconnectYouTubeAccount,
+                    onYouTubeAudioQualityChange = viewModel::setYouTubeAudioQuality,
                     onReloadFromStores = viewModel::reloadFromStores,
                 )
 
@@ -570,6 +575,7 @@ fun TunePlayerScreen(
                 isFavorite = state.currentTrack?.let { it.id in state.favoriteIds } == true,
                 syncedLyrics = state.syncedLyrics,
                 activeLyricIndex = state.activeLyricIndex,
+                lyricsOffsetMs = state.lyricsOffsetMs,
                 positionMs = state.positionMs,
                 durationMs = state.durationMs,
                 onSeek = viewModel::seekTo,
@@ -578,6 +584,7 @@ fun TunePlayerScreen(
                 onCycleRepeat = viewModel::cycleRepeatMode,
                 onToggleFavorite = viewModel::toggleFavorite,
                 onShare = { track -> shareTrack(context, track) },
+                onLyricsOffsetChange = viewModel::setLyricsOffsetMs,
                 onDismiss = { showLyricsSheet = false },
             )
         }
@@ -1762,6 +1769,7 @@ private fun NowPlayingSheet(
             }
             val bitrateKbps = audioInfo?.bitrateKbps
             val sampleRateHz = audioInfo?.sampleRateHz
+            val channelCount = audioInfo?.channelCount?.takeIf { it > 0 }
             val bitrateText = if (bitrateKbps != null) {
                 stringResource(R.string.audio_bitrate_value, bitrateKbps)
             } else {
@@ -1777,10 +1785,14 @@ private fun NowPlayingSheet(
             } else {
                 null
             }
+            val channelText = channelCount?.let {
+                stringResource(R.string.audio_channels_value, it)
+            }
             val audioMeta = listOfNotNull(
                 audioInfo?.codec,
                 bitrateText,
                 sampleRateText,
+                channelText,
             ).joinToString(" · ")
             if (audioMeta.isNotEmpty()) {
                 Spacer(Modifier.height(8.dp))
@@ -1921,6 +1933,7 @@ private fun LyricsSheet(
     isFavorite: Boolean,
     syncedLyrics: List<LrcParser.LrcLine>,
     activeLyricIndex: Int,
+    lyricsOffsetMs: Long,
     positionMs: Long,
     durationMs: Long,
     onSeek: (Long) -> Unit,
@@ -1929,6 +1942,7 @@ private fun LyricsSheet(
     onCycleRepeat: () -> Unit,
     onToggleFavorite: (Track) -> Unit,
     onShare: (Track) -> Unit,
+    onLyricsOffsetChange: (Long) -> Unit,
     onDismiss: () -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
@@ -1998,6 +2012,50 @@ private fun LyricsSheet(
                 }
                 IconButton(onClick = { onShare(track) }) {
                     Icon(Icons.Default.Share, contentDescription = stringResource(R.string.action_share))
+                }
+            }
+            if (syncedLyrics.isNotEmpty()) {
+                Spacer(Modifier.height(4.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    Text(
+                        text = stringResource(R.string.lyrics_offset_label),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    TextButton(
+                        onClick = { onLyricsOffsetChange(lyricsOffsetMs - 500L) },
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                    ) {
+                        Text(stringResource(R.string.lyrics_offset_earlier))
+                    }
+                    Text(
+                        text = stringResource(
+                            R.string.lyrics_offset_value,
+                            if (lyricsOffsetMs == 0L) {
+                                "0.0"
+                            } else {
+                                "%+.1f".format(lyricsOffsetMs / 1000f)
+                            },
+                        ),
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                    TextButton(
+                        onClick = { onLyricsOffsetChange(lyricsOffsetMs + 500L) },
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                    ) {
+                        Text(stringResource(R.string.lyrics_offset_later))
+                    }
+                    if (lyricsOffsetMs != 0L) {
+                        TextButton(
+                            onClick = { onLyricsOffsetChange(0L) },
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                        ) {
+                            Text(stringResource(R.string.lyrics_offset_reset))
+                        }
+                    }
                 }
             }
             Spacer(Modifier.height(16.dp))

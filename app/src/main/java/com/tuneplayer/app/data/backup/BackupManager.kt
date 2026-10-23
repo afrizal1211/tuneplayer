@@ -21,6 +21,12 @@ object BackupManager {
     private const val VERSION = 1
     private const val TAG = "BackupManager"
 
+    /** Credentials never belong in an export that users may share. */
+    private val SENSITIVE_KEYS = setOf(
+        "youtube_cookie",
+        "youtube_data_sync_id",
+    )
+
     /** Everything worth carrying between installs, and nothing transient. */
     private val PREF_FILES = listOf(
         "tuneplayer_settings",
@@ -43,6 +49,7 @@ object BackupManager {
             val all = context.getSharedPreferences(file, Context.MODE_PRIVATE).all
             val fileJson = JSONObject()
             all.forEach { (key, value) ->
+                if (key in SENSITIVE_KEYS) return@forEach
                 encode(value)?.let {
                     fileJson.put(key, it)
                     keys++
@@ -76,6 +83,7 @@ object BackupManager {
             val names = fileJson.keys()
             while (names.hasNext()) {
                 val key = names.next()
+                if (key in SENSITIVE_KEYS) continue
                 val entry = fileJson.optJSONObject(key) ?: continue
                 when (entry.optString("t")) {
                     "string" -> editor.putString(key, entry.optString("v"))

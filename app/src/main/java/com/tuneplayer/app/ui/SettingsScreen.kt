@@ -38,6 +38,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.tuneplayer.app.R
 import com.tuneplayer.app.data.backup.BackupManager
+import com.tuneplayer.app.data.model.YouTubeAudioQuality
 import com.tuneplayer.app.data.prefs.AppTheme
 import com.tuneplayer.app.log.LogCatcher
 
@@ -57,6 +58,8 @@ fun SettingsScreen(
     eqBandFreqs: List<Int>,
     eqBandRange: IntRange?,
     eqPreset: Int,
+    youtubeSignedIn: Boolean,
+    youtubeAudioQuality: YouTubeAudioQuality,
     onThemeChange: (AppTheme) -> Unit,
     onEqualizerChange: (Boolean, Int, Int) -> Unit,
     onSkipSilenceChange: (Boolean) -> Unit,
@@ -66,9 +69,13 @@ fun SettingsScreen(
     onPureBlackChange: (Boolean) -> Unit,
     onEqBandChange: (Int, Int) -> Unit,
     onEqPresetChange: (Int) -> Unit,
+    onYouTubeLogin: (String) -> Unit,
+    onYouTubeLogout: () -> Unit,
+    onYouTubeAudioQualityChange: (YouTubeAudioQuality) -> Unit,
     onReloadFromStores: () -> Unit,
 ) {
     var showLogs by remember { mutableStateOf(false) }
+    var showYouTubeLogin by remember { mutableStateOf(false) }
     var backupStatus by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
     val exportLauncher = rememberLauncherForActivityResult(
@@ -139,6 +146,63 @@ fun SettingsScreen(
             label = stringResource(R.string.settings_pure_black),
             checked = pureBlack,
             onCheckedChange = onPureBlackChange,
+        )
+
+        Spacer(Modifier.height(24.dp))
+        SettingsSectionTitle(stringResource(R.string.settings_youtube_account))
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(
+                        if (youtubeSignedIn) {
+                            R.string.settings_youtube_connected
+                        } else {
+                            R.string.settings_youtube_not_connected
+                        },
+                    ),
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+                Text(
+                    text = stringResource(R.string.settings_youtube_account_summary),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            TextButton(
+                onClick = {
+                    if (youtubeSignedIn) onYouTubeLogout() else showYouTubeLogin = true
+                },
+            ) {
+                Text(
+                    stringResource(
+                        if (youtubeSignedIn) R.string.action_sign_out else R.string.action_sign_in,
+                    ),
+                )
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        Text(
+            text = stringResource(R.string.settings_audio_quality),
+            style = MaterialTheme.typography.bodyLarge,
+        )
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            YouTubeAudioQuality.entries.forEach { option ->
+                FilterChip(
+                    selected = youtubeAudioQuality == option,
+                    onClick = { onYouTubeAudioQualityChange(option) },
+                    label = { Text(stringResource(option.labelRes())) },
+                )
+            }
+        }
+        Text(
+            text = stringResource(R.string.settings_audio_quality_summary),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
         Spacer(Modifier.height(24.dp))
@@ -289,6 +353,16 @@ fun SettingsScreen(
         }
     }
 
+    if (showYouTubeLogin) {
+        YouTubeLoginDialog(
+            onDismiss = { showYouTubeLogin = false },
+            onAuthenticated = { cookie ->
+                onYouTubeLogin(cookie)
+                showYouTubeLogin = false
+            },
+        )
+    }
+
     if (showLogs) {
         LogViewerDialog(
             onDismiss = { showLogs = false },
@@ -422,6 +496,13 @@ private fun EffectSlider(
             enabled = enabled,
         )
     }
+}
+
+private fun YouTubeAudioQuality.labelRes(): Int = when (this) {
+    YouTubeAudioQuality.Auto -> R.string.audio_quality_auto
+    YouTubeAudioQuality.High -> R.string.audio_quality_high
+    YouTubeAudioQuality.DataSaver -> R.string.audio_quality_data_saver
+    YouTubeAudioQuality.Mp4 -> R.string.audio_quality_mp4
 }
 
 private fun AppTheme.label(): String = when (this) {

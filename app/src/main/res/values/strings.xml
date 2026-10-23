@@ -147,4 +147,27 @@
     <string name="audio_sample_rate_value">%1$s kHz</string>
     <string name="queue_badge_overflow">99+</string>
     <string name="search_empty_hint">Search for songs, albums, and artists.</string>
+    <string name="settings_youtube_account">YouTube Music account</string>
+    <string name="settings_youtube_connected">Connected</string>
+    <string name="settings_youtube_not_connected">Not connected</string>
+    <string name="settings_youtube_account_summary">Sign in to use your account for search and playback.</string>
+    <string name="action_sign_in">Sign in</string>
+    <string name="action_sign_out">Sign out</string>
+    <string name="settings_audio_quality">Audio quality</string>
+    <string name="settings_audio_quality_summary">Applies to the next track you play.</string>
+    <string name="audio_quality_auto">Auto</string>
+    <string name="audio_quality_high">High</string>
+    <string name="audio_quality_data_saver">Data saver</string>
+    <string name="audio_quality_mp4">AAC (MP4)</string>
+    <string name="youtube_login_title">Sign in to YouTube Music</string>
+    <string name="youtube_login_summary">The session is stored on this device. Google may ask you to confirm the sign-in.</string>
+    <string name="youtube_login_waiting">Waiting for sign-in…</string>
+    <string name="youtube_login_failed">Sign-in failed. Close this window and try again.</string>
+    <string name="youtube_login_close">Close</string>
+    <string name="lyrics_offset_label">Lyrics offset</string>
+    <string name="lyrics_offset_earlier">−0.5s</string>
+    <string name="lyrics_offset_later">+0.5s</string>
+    <string name="lyrics_offset_reset">Reset</string>
+    <string name="lyrics_offset_value">%1$s s</string>
+    <string name="audio_channels_value">%1$d ch</string>
 </resources>

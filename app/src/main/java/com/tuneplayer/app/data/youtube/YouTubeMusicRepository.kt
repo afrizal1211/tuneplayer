@@ -13,6 +13,7 @@ import com.metrolist.innertubex.models.YouTubeClient
 import com.metrolist.innertubex.models.response.SearchResponse
 import com.tuneplayer.app.data.model.AudioInfo
 import com.tuneplayer.app.data.model.Track
+import com.tuneplayer.app.data.model.YouTubeAudioQuality
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.get
@@ -96,6 +97,36 @@ class YouTubeMusicRepository {
         innerTube = innerTube,
     )
 
+    /**
+     * Applies a YouTube Music session captured by the in-app login.
+     *
+     * The InnerTube client uses SAPISID for account-bound search and playback
+     * once login-for-browse is enabled.
+     */
+    fun applySession(
+        cookie: String,
+        dataSyncId: String? = null,
+        authUser: String = "0",
+    ) {
+        innerTube.replaceSession(
+            cookie = cookie,
+            visitorData = innerTube.visitorData,
+            dataSyncId = dataSyncId,
+            authUser = authUser,
+            useLoginForBrowse = true,
+        )
+    }
+
+    fun clearSession() {
+        innerTube.replaceSession(
+            cookie = null,
+            visitorData = innerTube.visitorData,
+            dataSyncId = null,
+            authUser = "0",
+            useLoginForBrowse = false,
+        )
+    }
+
     suspend fun search(query: String): List<Track> {
         val response = innerTube.search(YouTubeClient.WEB_REMIX, query = query).body<SearchResponse>()
         val renderers = mutableListOf<JsonObject>()
@@ -161,12 +192,15 @@ class YouTubeMusicRepository {
         }
     }
 
-    suspend fun resolveAudio(videoId: String): ResolvedAudio {
+    suspend fun resolveAudio(
+        videoId: String,
+        quality: YouTubeAudioQuality = YouTubeAudioQuality.High,
+    ): ResolvedAudio {
         val stream = extractor.extract(
             videoId = videoId,
             hints = ContentHints(wantVideo = false)
                 .withStreamCapabilities(allowHls = false, allowSabr = false),
-            audioQuality = AudioQuality.HIGH,
+            audioQuality = quality.toInnerTubeQuality(),
         ) ?: error("YouTube Music returned no playable audio stream.")
 
         val requestHeaders = stream.headers
@@ -264,4 +298,11 @@ class YouTubeMusicRepository {
             else -> null
         }
     }
+}
+
+private fun YouTubeAudioQuality.toInnerTubeQuality(): AudioQuality = when (this) {
+    YouTubeAudioQuality.Auto -> AudioQuality.AUTO
+    YouTubeAudioQuality.High -> AudioQuality.HIGH
+    YouTubeAudioQuality.DataSaver -> AudioQuality.LOW
+    YouTubeAudioQuality.Mp4 -> AudioQuality.MP4
 }

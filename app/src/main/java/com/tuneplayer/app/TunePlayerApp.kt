@@ -30,7 +30,15 @@ class TunePlayerApp : Application() {
     }
 
     val youTubeMusicRepository: YouTubeMusicRepository by lazy {
-        YouTubeMusicRepository()
+        YouTubeMusicRepository().also { repository ->
+            settingsStore.youtubeCookie?.let { cookie ->
+                repository.applySession(
+                    cookie = cookie,
+                    dataSyncId = settingsStore.youtubeDataSyncId,
+                    authUser = settingsStore.youtubeAuthUser,
+                )
+            }
+        }
     }
 
     val playlistStore: PlaylistStore by lazy {

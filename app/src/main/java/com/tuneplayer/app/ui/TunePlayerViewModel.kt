@@ -3,6 +3,7 @@ package com.tuneplayer.app.ui
 import android.app.Application
 import android.content.ComponentName
 import android.net.Uri
+import android.webkit.CookieManager
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -25,6 +26,7 @@ import com.tuneplayer.app.R
 import com.tuneplayer.app.data.model.AudioInfo
 import com.tuneplayer.app.data.model.Track
 import com.tuneplayer.app.data.model.LibrarySort
+import com.tuneplayer.app.data.model.YouTubeAudioQuality
 import com.tuneplayer.app.data.model.applySort
 import com.tuneplayer.app.data.model.matchesQuery
 import com.tuneplayer.app.data.prefs.AppTheme
@@ -85,6 +87,9 @@ data class TunePlayerUiState(
     val librarySort: LibrarySort = LibrarySort.Title,
     val librarySortDescending: Boolean = false,
     val libraryQuery: String = "",
+    val youtubeSignedIn: Boolean = false,
+    val youtubeAudioQuality: YouTubeAudioQuality = YouTubeAudioQuality.High,
+    val lyricsOffsetMs: Long = 0L,
 )
 
 class TunePlayerViewModel(application: Application) : AndroidViewModel(application) {
@@ -130,6 +135,9 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
             pureBlack = app.settingsStore.pureBlack,
             searchHistory = app.settingsStore.searchHistory,
             playlists = playlistStore.all(),
+            youtubeSignedIn = app.settingsStore.youtubeCookie != null,
+            youtubeAudioQuality = app.settingsStore.youtubeAudioQuality,
+            lyricsOffsetMs = app.settingsStore.lyricsOffsetMs,
         )
         controllerFuture.addListener(
             {
@@ -228,7 +236,10 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
                 }
                 val lines = uiState.syncedLyrics
                 if (lines.isNotEmpty()) {
-                    val idx = LrcParser.activeIndex(lines, uiState.positionMs)
+                    val idx = LrcParser.activeIndex(
+                        lines,
+                        (uiState.positionMs - uiState.lyricsOffsetMs).coerceAtLeast(0L),
+                    )
                     if (idx != uiState.activeLyricIndex) {
                         uiState = uiState.copy(activeLyricIndex = idx)
                     }
@@ -411,7 +422,7 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
             }
             uiState = uiState.copy(isSearching = true)
             try {
-                val audio = youTubeRepository.resolveAudio(videoId)
+                val audio = youTubeRepository.resolveAudio(videoId, uiState.youtubeAudioQuality)
                 uiState = uiState.copy(isSearching = false)
                 cacheResolvedUri(track.id, audio.url)
                 playResolved(
@@ -888,6 +899,16 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
         ThemeController.set(settings.theme)
         ThemeController.updateDynamicColor(settings.dynamicColor)
         ThemeController.updatePureBlack(settings.pureBlack)
+        val cookie = settings.youtubeCookie
+        if (cookie == null) {
+            youTubeRepository.clearSession()
+        } else {
+            youTubeRepository.applySession(
+                cookie = cookie,
+                dataSyncId = settings.youtubeDataSyncId,
+                authUser = settings.youtubeAuthUser,
+            )
+        }
         uiState = uiState.copy(
             theme = settings.theme,
             equalizerEnabled = settings.equalizerEnabled,
@@ -908,6 +929,9 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
             pureBlack = settings.pureBlack,
             searchHistory = settings.searchHistory,
             playlists = playlistStore.all(),
+            youtubeSignedIn = settings.youtubeCookie != null,
+            youtubeAudioQuality = settings.youtubeAudioQuality,
+            lyricsOffsetMs = settings.lyricsOffsetMs,
         )
         refreshHistoryTracks()
         LogCatcher.d(TAG, "reloaded stores after restore")
@@ -922,6 +946,57 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
         app.settingsStore.equalizerEnabled = enabled
         app.settingsStore.bassBoostLevel = bass
         app.settingsStore.virtualizerLevel = virtualizer
+    }
+
+    /** Stores a SAPISID-bearing cookie and switches InnerTube to the account. */
+    fun connectYouTubeAccount(cookie: String) {
+        val normalized = cookie.trim()
+        if (!normalized.contains("SAPISID=", ignoreCase = true)) {
+            uiState = uiState.copy(error = app.getString(R.string.youtube_login_failed))
+            return
+        }
+        app.settingsStore.youtubeCookie = normalized
+        app.settingsStore.youtubeDataSyncId = null
+        app.settingsStore.youtubeAuthUser = "0"
+        youTubeRepository.applySession(normalized, dataSyncId = null, authUser = "0")
+        resolvedUris.clear()
+        uiState = uiState.copy(youtubeSignedIn = true, error = null)
+        LogCatcher.d(TAG, "YouTube Music account connected")
+    }
+
+    fun disconnectYouTubeAccount() {
+        app.settingsStore.clearYouTubeSession()
+        youTubeRepository.clearSession()
+        resolvedUris.clear()
+        runCatching {
+            CookieManager.getInstance().removeAllCookies(null)
+            CookieManager.getInstance().flush()
+        }
+        uiState = uiState.copy(youtubeSignedIn = false)
+        LogCatcher.d(TAG, "YouTube Music account disconnected")
+    }
+
+    fun setYouTubeAudioQuality(quality: YouTubeAudioQuality) {
+        app.settingsStore.youtubeAudioQuality = quality
+        // Cached stream URLs were resolved with the previous format.
+        resolvedUris.clear()
+        uiState = uiState.copy(youtubeAudioQuality = quality)
+    }
+
+    /** Positive values delay lyrics; negative values show them earlier. */
+    fun setLyricsOffsetMs(offsetMs: Long) {
+        val clamped = offsetMs.coerceIn(-5_000L, 5_000L)
+        app.settingsStore.lyricsOffsetMs = clamped
+        val lines = uiState.syncedLyrics
+        val active = if (lines.isEmpty()) {
+            -1
+        } else {
+            LrcParser.activeIndex(
+                lines,
+                (uiState.positionMs - clamped).coerceAtLeast(0L),
+            )
+        }
+        uiState = uiState.copy(lyricsOffsetMs = clamped, activeLyricIndex = active)
     }
 
     fun loadLyrics() {
