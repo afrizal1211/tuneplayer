@@ -243,30 +243,34 @@ fun SettingsScreen(
             }
             val min = eqBandRange?.first ?: -1500
             val max = eqBandRange?.last ?: 1500
-            eqBandFreqs.forEachIndexed { index, freq ->
-                val level = eqBands.getOrNull(index) ?: 0
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = formatBandFreq(freq),
-                        style = MaterialTheme.typography.labelMedium,
-                        modifier = Modifier.width(56.dp),
-                    )
-                    Slider(
-                        value = level.toFloat(),
-                        valueRange = min.toFloat()..max.toFloat(),
-                        onValueChange = { onEqBandChange(index, it.toInt()) },
-                        modifier = Modifier.weight(1f),
-                    )
-                    Text(
-                        text = "%d dB".format(level / 100),
-                        style = MaterialTheme.typography.labelSmall,
-                        modifier = Modifier.width(48.dp),
-                    )
+            // A degenerate range makes Slider throw; skip the sliders instead.
+            val rangeUsable = min < max
+            if (rangeUsable) {
+                eqBandFreqs.forEachIndexed { index, freq ->
+                    val level = eqBands.getOrNull(index) ?: 0
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = formatBandFreq(freq),
+                            style = MaterialTheme.typography.labelMedium,
+                            modifier = Modifier.width(56.dp),
+                        )
+                        Slider(
+                            value = level.toFloat(),
+                            valueRange = min.toFloat()..max.toFloat(),
+                            onValueChange = { onEqBandChange(index, it.toInt()) },
+                            modifier = Modifier.weight(1f),
+                        )
+                        Text(
+                            text = "%d dB".format(level / 100),
+                            style = MaterialTheme.typography.labelSmall,
+                            modifier = Modifier.width(48.dp),
+                        )
+                    }
                 }
             }
         }
