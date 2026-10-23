@@ -929,6 +929,19 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
         LogCatcher.d(TAG, "eq preset $preset over $count bands")
     }
 
+    fun moveInQueue(fromIndex: Int, toIndex: Int) {
+        val queue = uiState.playbackQueue
+        if (fromIndex !in queue.indices || toIndex !in queue.indices || fromIndex == toIndex) return
+        val playingId = queue.getOrNull(uiState.queueIndex)?.id
+        val newQueue = queue.toMutableList().apply { add(toIndex, removeAt(fromIndex)) }
+        val newIndex = playingId
+            ?.let { id -> newQueue.indexOfFirst { it.id == id } }
+            ?.takeIf { it >= 0 }
+            ?: 0
+        uiState = uiState.copy(playbackQueue = newQueue, queueIndex = newIndex)
+        pushQueueToPlayer(newQueue, newIndex)
+    }
+
     private companion object {
         const val TAG = "TunePlayerVM"
         const val MAX_RESOLVED_CACHE = 50
