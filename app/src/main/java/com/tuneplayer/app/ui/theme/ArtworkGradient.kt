@@ -32,14 +32,17 @@ object ArtworkGradient {
     }
 
     private suspend fun loadBitmap(uri: String, context: android.content.Context): Bitmap? {
-        val loader = ImageLoader(context)
+        // A fresh loader per call is fine here: it borrows the app's shared
+        // disk/memory cache, so the heavy work is still done once.
+        val loader = runCatching { ImageLoader(context) }.getOrNull() ?: return null
         val request = ImageRequest.Builder(context)
             .data(Uri.parse(uri))
             // Small enough to be cheap, large enough to skip JPEG block noise.
             .size(64, 64)
             .build()
-        val result = loader.execute(request) as? SuccessResult ?: return null
-        return result.image.toBitmap()
+        val result = runCatching { loader.execute(request) }.getOrNull() as? SuccessResult
+            ?: return null
+        return runCatching { result.image.toBitmap() }.getOrNull()
     }
 
     /** Two-stop gradient from the most populous and most distant colors. */

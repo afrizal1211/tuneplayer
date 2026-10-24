@@ -137,6 +137,7 @@ import androidx.compose.runtime.setValue
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import kotlin.math.abs
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
@@ -146,6 +147,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -2117,9 +2119,10 @@ private fun Artwork(
     size: Int,
     cornerRadius: Int = 8,
     shadowElevation: Int = 0,
+    modifier: Modifier = Modifier,
 ) {
     val shape = RoundedCornerShape(cornerRadius.dp)
-    val modifier = Modifier
+    val baseModifier = modifier
         .size(size.dp)
         .shadow(elevation = shadowElevation.dp, shape = shape)
         .clip(shape)
@@ -2129,11 +2132,11 @@ private fun Artwork(
         AsyncImage(
             model = track.artworkUri,
             contentDescription = null,
-            modifier = modifier,
+            modifier = baseModifier,
             contentScale = ContentScale.Crop,
         )
     } else {
-        Box(modifier = modifier, contentAlignment = Alignment.Center) {
+        Box(modifier = baseModifier, contentAlignment = Alignment.Center) {
             Icon(
                 imageVector = Icons.Default.MusicNote,
                 contentDescription = null,
@@ -2665,18 +2668,25 @@ private fun NowPlayingSheet(
     val iconSize = 28.dp
     val sideButtonSize = 56.dp
     val centerButtonSize = 72.dp
+    // BitChord's signature touch: the sleeve shrinks while paused, so the
+    // play/pause state reads from across the room without looking at the icon.
+    val artScale by animateFloatAsState(
+        targetValue = if (isPlaying) 1f else 0.86f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioLowBouncy,
+            stiffness = Spring.StiffnessLow,
+        ),
+        label = "artScale",
+    )
 
     // Backdrop tinted by the artwork's own colors, crossfaded when the track
     // changes so the sheet never snaps between two palettes.
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
     val gradientStops = remember { mutableStateOf<List<androidx.compose.ui.graphics.Color>?>(null) }
     LaunchedEffect(track.artworkUri) {
         val uri = track.artworkUri ?: return@LaunchedEffect
-        scope.launch {
-            val colors = ArtworkGradient.fromUri(uri, context)
-            gradientStops.value = colors
-        }
+        val colors = runCatching { ArtworkGradient.fromUri(uri, context) }.getOrNull()
+        gradientStops.value = colors
     }
     val surface = MaterialTheme.colorScheme.surface
     val topColor by animateColorAsState(
@@ -2738,6 +2748,10 @@ private fun NowPlayingSheet(
                     size = 264,
                     cornerRadius = 24,
                     shadowElevation = 16,
+                    modifier = Modifier.graphicsLayer {
+                        scaleX = artScale
+                        scaleY = artScale
+                    },
                 )
                 Spacer(Modifier.height(24.dp))
                 Text(
@@ -3262,7 +3276,12 @@ private fun SeekBarRow(
     }
 }
 
-/** Highlights the line for the current playback position and keeps it in view. */
+/**
+ * Highlights the line for the current playback position and keeps it in view.
+ *
+ * The active line grows and lights up with a spring while its neighbours fade
+ * back, which reads as the line being sung rather than merely highlighted.
+ */
 @Composable
 private fun SyncedLyrics(
     lines: List<LrcParser.LrcLine>,
@@ -3281,17 +3300,52 @@ private fun SyncedLyrics(
             .heightIn(min = 160.dp, max = 360.dp),
     ) {
         itemsIndexed(lines) { index, line ->
+            val active = index == activeIndex
+            // Distance drives falloff: the sung line is full size, its
+            // neighbours shrink a little, everything else stays small.
+            val distance = abs(index - activeIndex).coerceAtMost(3)
+            val scale by animateFloatAsState(
+                targetValue = when {
+                    active -> 1.12f
+                    distance == 1 -> 1.0f
+                    distance == 2 -> 0.94f
+                    else -> 0.88f
+                },
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioLowBouncy,
+                    stiffness = Spring.StiffnessLow,
+                ),
+                label = "lyricScale",
+            )
+            val alpha by animateFloatAsState(
+                targetValue = when {
+                    active -> 1f
+                    distance == 1 -> 0.75f
+                    distance == 2 -> 0.5f
+                    else -> 0.32f
+                },
+                animationSpec = tween(220),
+                label = "lyricAlpha",
+            )
             Text(
                 text = line.text,
                 style = MaterialTheme.typography.bodyLarge,
-                fontWeight = if (index == activeIndex) FontWeight.Bold else FontWeight.Normal,
-                color = if (index == activeIndex) {
+                fontWeight = if (active) FontWeight.Bold else FontWeight.Medium,
+                color = if (active) {
                     MaterialTheme.colorScheme.primary
                 } else {
                     MaterialTheme.colorScheme.onSurfaceVariant
                 },
                 modifier = Modifier
                     .fillMaxWidth()
+                    .graphicsLayer {
+                        scaleX = scale
+                        scaleY = scale
+                        this.alpha = alpha
+                        // Anchor the growth to the left edge so the line does
+                        // not slide sideways as it scales.
+                        transformOrigin = TransformOrigin(0f, 0.5f)
+                    }
                     .padding(vertical = 8.dp),
             )
         }

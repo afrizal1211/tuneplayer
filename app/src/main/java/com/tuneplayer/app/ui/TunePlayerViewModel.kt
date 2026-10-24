@@ -610,9 +610,6 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
         LogCatcher.d(TAG, "play: ${track.title} local=${track.isLocal}")
         viewModelScope.launch {
             uiState = uiState.copy(error = null)
-
-            // A single tap on a song seeds the queue with its siblings so the
-            // player has somewhere to go when the track ends.
             val seeded = autoQueueSeed(track)
             val index = seeded.indexOfFirst { it.id == track.id }
                 .takeIf { it >= 0 } ?: seeded.lastIndex
@@ -623,22 +620,27 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     /**
-     * Builds the queue to start from when the user picks [track] by hand.
+     * Builds the queue [play] starts from when the user taps a song.
      *
-     * Returns [track] alone when the queue is already populated (an explicit
-     * queue is never clobbered) or when nothing else is known. Otherwise the
-     * rest of the library follows in display order, starting at [track], so a
-     * queue that is currently exhausted or single-track gains a real playlist.
+     * An already-populated queue is kept and the track is inserted after the
+     * current item: replacing it would drop everything the user queued, and
+     * [playResolved] would then fall back to a single-item player. Only an
+     * empty or single-track queue is seeded from the library, starting at the
+     * tapped song and wrapping around, so playback has somewhere to go.
      */
     private fun autoQueueSeed(track: Track): List<Track> {
-        if (uiState.playbackQueue.size > 1) return uiState.playbackQueue
-        val siblings = (visibleLocalTracks + uiState.searchResults + uiState.downloadedTracks)
-            .filter { it.id != track.id }
+        val queue = uiState.playbackQueue
+        if (queue.size > 1) {
+            if (queue.any { it.id == track.id }) return queue
+            val insertAt = (uiState.queueIndex + 1).coerceAtMost(queue.size)
+            return queue.toMutableList().apply { add(insertAt, track) }
+        }
+        val pool = (visibleLocalTracks + uiState.searchResults + uiState.downloadedTracks)
             .distinctBy { it.id }
-        if (siblings.isEmpty()) return listOf(track)
-        val index = siblings.indexOfFirst { it.id == track.id }
-        if (index < 0) return listOf(track) + siblings
-        return siblings.subList(index, siblings.size) + siblings.subList(0, index)
+        if (pool.isEmpty()) return listOf(track)
+        val start = pool.indexOfFirst { it.id == track.id }
+        if (start < 0) return listOf(track) + pool
+        return pool.subList(start, pool.size) + pool.subList(0, start)
     }
 
     /** Adds [track] to the queue and points [TunePlayerUiState.queueIndex] at it. */
