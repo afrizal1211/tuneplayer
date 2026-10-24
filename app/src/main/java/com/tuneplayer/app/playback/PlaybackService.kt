@@ -20,6 +20,7 @@ import com.tuneplayer.app.data.prefs.SettingsStore
 import com.tuneplayer.app.log.LogCatcher
 import com.tuneplayer.app.playback.smart.TempoEstimator
 import com.tuneplayer.app.playback.smart.TransitionPlanner
+import com.tuneplayer.app.playback.smart.TransitionStyle
 import com.tuneplayer.app.playback.smart.TransitionTrackInfo
 import com.tuneplayer.app.ui.AudioEffects
 import kotlinx.coroutines.CancellationException
@@ -234,11 +235,12 @@ class PlaybackService : MediaSessionService() {
             // usually already run during the warm-up, so this normally only
             // reads the cache; when it does miss, the plain crossfade is used.
             val automix = settingsStore.automixEnabled
+            var plan: TransitionPlan? = null
             val blendMs = if (automix) {
                 val tempoEstimator = TempoEstimator(this@PlaybackService)
                 val outgoingBpm = tempoEstimator.estimate(currentItem, outgoingMediaId)
                 val incomingBpm = tempoEstimator.estimate(target, target.mediaId)
-                val plan = TransitionPlanner.planTransition(
+                plan = TransitionPlanner.planTransition(
                     current = TransitionTrackInfo(
                         id = outgoingMediaId,
                         durationMs = duration,
@@ -287,7 +289,7 @@ class PlaybackService : MediaSessionService() {
                     val adjusted = (duration - player.currentPosition - CROSSFADE_END_GUARD_MS)
                         .coerceAtMost(blendMs)
                     if (adjusted >= MIN_CROSSFADE_MS) {
-                        startCrossfade(targetIndex, target.mediaId, adjusted)
+                        startCrossfade(targetIndex, target.mediaId, adjusted, plan)
                     }
                     return@launch
                 }
@@ -344,7 +346,12 @@ class PlaybackService : MediaSessionService() {
         return secondary
     }
 
-    private fun startCrossfade(targetIndex: Int, targetMediaId: String, durationMs: Long) {
+    private fun startCrossfade(
+        targetIndex: Int,
+        targetMediaId: String,
+        durationMs: Long,
+        plan: TransitionPlan? = null,
+    ) {
         val player = player ?: return
         val secondary = secondaryPlayer ?: return
         if (isCrossfading) return
@@ -370,8 +377,31 @@ class PlaybackService : MediaSessionService() {
                 val remaining = (player.duration - player.currentPosition - CROSSFADE_END_GUARD_MS)
                     .coerceIn(MIN_CROSSFADE_MS, durationMs)
 
+                // The planner's cue point is where in the incoming track the
+                // blend should open — a beat boundary rather than the top of the
+                // song. A plan without one (plain crossfade, or no tempo) starts
+                // the incoming track at zero.
+                val cueMs = plan?.incomingCueTime?.takeIf { it > 0.0 }
+                    ?.let { (it * 1000.0).toLong() }
+                    ?: 0L
+                if (cueMs > 0L) secondary.seekTo(cueMs)
+
+                // The incoming track is stretched up to the outgoing tempo so
+                // the two grids line up across the overlap.
+                val rate = plan?.incomingPlaybackRate?.takeIf { it > 0.0 && it != 1.0 }
+                    ?.toFloat()
+                    ?: 1f
+                if (rate != 1f) secondary.setPlaybackSpeed(rate)
+
                 secondary.playWhenReady = crossfadePlaybackRequested
                 if (crossfadePlaybackRequested) secondary.play()
+
+                // Gapless is not a blend: the album is meant to be heard
+                // straight through, so the incoming track simply takes over.
+                if (plan?.transitionStyle == TransitionStyle.GAPLESS) {
+                    finishCrossfade(secondary)
+                    return@launch
+                }
 
                 var elapsed = 0L
                 var lastTick = SystemClock.elapsedRealtime()
