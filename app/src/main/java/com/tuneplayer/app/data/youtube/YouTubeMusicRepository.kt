@@ -5,6 +5,7 @@ import com.metrolist.innertubex.cipher.PlayerConfigRepository
 import com.metrolist.innertubex.cipher.RemotePlayerConfigStore
 import com.metrolist.innertubex.cipher.YouTubeCipherService
 import com.metrolist.innertubex.extraction.AudioQuality
+import com.metrolist.innertubex.extraction.StreamResolveException
 import com.metrolist.innertubex.extraction.ContentHints
 import com.metrolist.innertubex.extraction.InnerTubeExtractor
 import com.metrolist.innertubex.extraction.YtConfigParserImpl
@@ -510,63 +511,87 @@ class YouTubeMusicRepository {
         videoId: String,
         quality: YouTubeAudioQuality = YouTubeAudioQuality.High,
     ): ResolvedAudio {
-        // A client whose URL fails the probe is skipped and the next asked, so
-        // one minted-but-dead URL does not fail the track. Each attempt pays a
-        // full client walk, so the budget is bounded.
-        val clients = STREAM_CLIENT_FALLBACK_ORDER.take(STREAM_RESOLVE_ATTEMPTS)
-        var lastError: Exception? = null
-
-        for (client in clients) {
-            val stream = try {
+        // The extractor walks its own client catalogue and retries across
+        // identities, which is the part that actually recovers a track. Pinning
+        // a client with playbackClientOverrideId is avoided on purpose: it caps
+        // the request budget to one and forces PoToken minting on web clients
+        // with no token provider, so a resolvable track comes back
+        // NO_PLAYABLE_STREAM.
+        val stream = try {
+            extractor.extract(
+                videoId = videoId,
+                hints = ContentHints(wantVideo = false)
+                    .withStreamCapabilities(allowHls = false, allowSabr = false),
+                audioQuality = quality.toInnerTubeQuality(),
+            )
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            // Age gates and takedowns never soften; everything else is worth one
+            // more pass, because a refusal is often per-client rather than
+            // per-track.
+            val retryable = error !is StreamResolveException ||
+                error.reason !in TERMINAL_REASONS
+            if (!retryable) throw error
+            val retry = runCatching {
                 extractor.extract(
                     videoId = videoId,
                     hints = ContentHints(wantVideo = false)
-                        .withStreamCapabilities(allowHls = false, allowSabr = false)
-                        .copy(playbackClientOverrideId = client.clientName),
+                        .withStreamCapabilities(allowHls = false, allowSabr = false),
                     audioQuality = quality.toInnerTubeQuality(),
+                    excludedClients = excludedFrom(error),
                 )
-            } catch (cancelled: kotlinx.coroutines.CancellationException) {
-                throw cancelled
-            } catch (error: Exception) {
-                lastError = error
-                null
-            } ?: continue
+            }.getOrNull()
+            retry ?: throw error
+        } ?: error("YouTube Music returned no playable audio stream.")
 
-            // The URL is signed against the client identity that minted it, so
-            // its own headers are used exactly as given. Rewriting the
-            // User-Agent here — even to a newer one — breaks the signature and
-            // the URL answers 403.
-            val requestHeaders = stream.headers
+        // The URL is signed against the client identity that minted it, so its
+        // own headers are used exactly as given. Rewriting the User-Agent here
+        // — even to a newer one — breaks the signature and the URL answers 403.
+        val requestHeaders = stream.headers
 
-            // Nothing is handed to the player, or cached, until bytes have
-            // been fetched from the URL.
-            val probe = probeStream(
-                url = stream.audioUrl,
-                requestHeaders = requestHeaders,
-                rangeBytes = if (stream.useRangeChunks) {
-                    stream.rangeChunkSizeBytes
-                } else {
-                    1L
-                },
-            )
-            // An unreachable URL may still be good — the device was offline, or
-            // the request timed out. Refusal is the server's own answer.
-            if (probe == StreamProbe.REFUSED) continue
-
-            RESOLVED_HEADERS[stream.audioUrl] = requestHeaders
-            // The player and the tempo decoder fetch this URL again later, so
-            // the headers it was signed against have to be reachable then too.
-            StreamHeaders.put(stream.audioUrl, requestHeaders)
-            return ResolvedAudio(
-                url = stream.audioUrl,
-                mimeType = stream.mimeType,
-                headers = requestHeaders,
-                codec = AudioInfo.codecLabel(stream.mimeType),
-                contentLengthBytes = stream.contentLengthBytes,
+        // Nothing is handed to the player, or cached, until bytes have been
+        // fetched from the URL.
+        val probe = probeStream(
+            url = stream.audioUrl,
+            requestHeaders = requestHeaders,
+            rangeBytes = if (stream.useRangeChunks) {
+                stream.rangeChunkSizeBytes
+            } else {
+                1L
+            },
+        )
+        // An unreachable URL may still be good — the device was offline, or the
+        // request timed out. Refusal is the server's own answer.
+        if (probe == StreamProbe.REFUSED) {
+            throw StreamResolveException(
+                StreamResolveException.Reason.NO_PLAYABLE_STREAM,
+                "Stream URL refused a byte-range probe.",
             )
         }
 
-        throw lastError ?: error("YouTube Music returned no playable audio stream.")
+        RESOLVED_HEADERS[stream.audioUrl] = requestHeaders
+        // The player and the tempo decoder fetch this URL again later, so the
+        // headers it was signed against have to be reachable then too.
+        StreamHeaders.put(stream.audioUrl, requestHeaders)
+        return ResolvedAudio(
+            url = stream.audioUrl,
+            mimeType = stream.mimeType,
+            headers = requestHeaders,
+            codec = AudioInfo.codecLabel(stream.mimeType),
+            contentLengthBytes = stream.contentLengthBytes,
+        )
+    }
+
+    /**
+     * The clients a failed attempt already tried, so a retry does not repeat it.
+     *
+     * The extractor reports which identities it walked; excluding them is what
+     * makes the second pass reach clients the first one did not.
+     */
+    private fun excludedFrom(error: Exception): Set<String> {
+        val diagnostics = (error as? StreamResolveException)?.diagnostics ?: return emptySet()
+        return diagnostics.attempts.mapTo(mutableSetOf()) { it.clientName }
     }
 
     /**

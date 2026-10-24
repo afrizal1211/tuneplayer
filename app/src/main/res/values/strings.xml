@@ -52,6 +52,11 @@
     <string name="error_local_failed">Could not read local music.</string>
     <string name="error_search_failed">YouTube Music search failed.</string>
     <string name="error_resolve_failed">Could not resolve YouTube audio.</string>
+    <string name="error_stream_unavailable">This track is no longer available on YouTube.</string>
+    <string name="error_stream_age_restricted">This track is age-restricted, so it cannot be played here.</string>
+    <string name="error_stream_explicit">This track is marked explicit and cannot be played here.</string>
+    <string name="error_stream_no_music_video">YouTube did not return an audio stream for this track.</string>
+    <string name="error_stream_network">Could not reach YouTube. Check your connection and try again.</string>
     <string name="error_connection">Player connection failed.</string>
     <string name="permission_needed">Audio access is required to scan local music.</string>
 

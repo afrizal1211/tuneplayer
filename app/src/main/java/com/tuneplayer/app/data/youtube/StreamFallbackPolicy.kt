@@ -1,6 +1,5 @@
 package com.tuneplayer.app.data.youtube
 
-import com.metrolist.innertubex.models.YouTubeClient
 
 /**
  * Why a stream URL was refused.
@@ -25,20 +24,15 @@ enum class StreamProbe {
 }
 
 /**
- * Which client identities to ask, and in what order.
+ * How many client identities a single resolve may try before giving up.
  *
- * A client whose URL fails the probe is skipped and the next one tried, so a
- * single minted-but-dead URL does not fail the track. The order is the one
- * that resolves most tracks: the web remix client is the most complete, the
- * mobile clients answer when it does not.
+ * The extractor walks its own client catalogue and retries across identities
+ * itself, so this is a bound on *that*, not a hand-rolled loop. Forcing a
+ * specific client with `playbackClientOverrideId` is deliberately not done: it
+ * caps the request budget to one and forces PoToken minting on web clients that
+ * have no token provider, which turns a resolvable track into
+ * NO_PLAYABLE_STREAM.
  */
-val STREAM_CLIENT_FALLBACK_ORDER = listOf(
-    YouTubeClient.WEB_REMIX,
-    YouTubeClient.ANDROID_MUSIC,
-    YouTubeClient.IOS_MUSIC,
-)
-
-/** How many distinct clients a single resolve may try before giving up. */
 const val STREAM_RESOLVE_ATTEMPTS = 3
 
 /**

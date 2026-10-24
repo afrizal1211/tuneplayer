@@ -27,6 +27,7 @@ import com.tuneplayer.app.R
 import com.tuneplayer.app.data.model.AudioInfo
 import com.tuneplayer.app.data.model.Track
 import com.tuneplayer.app.data.model.LibrarySort
+import com.metrolist.innertubex.extraction.StreamResolveException
 import com.tuneplayer.app.data.model.YouTubeAudioQuality
 import com.tuneplayer.app.data.model.applySort
 import com.tuneplayer.app.data.model.matchesQuery
@@ -725,10 +726,33 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
                 LogCatcher.e(TAG, "YouTube resolve failed", error)
                 uiState = uiState.copy(
                     isSearching = false,
-                    error = error.message ?: app.getString(R.string.error_resolve_failed),
+                    error = describeResolveFailure(error),
                 )
             }
         }
+    }
+
+    /**
+     * The message a failed resolve shows the listener.
+     *
+     * The library reports *why* a track could not be resolved, and the reason
+     * changes what the listener can do about it: an age gate or a takedown is
+     * permanent, a network failure is not. Showing the raw exception text tells
+     * them nothing they can act on.
+     */
+    private fun describeResolveFailure(error: Exception): String {
+        val res = when (error) {
+            is StreamResolveException -> when (error.reason) {
+                StreamResolveException.Reason.UNAVAILABLE -> R.string.error_stream_unavailable
+                StreamResolveException.Reason.AGE_RESTRICTED -> R.string.error_stream_age_restricted
+                StreamResolveException.Reason.EXPLICIT_UNSUPPORTED -> R.string.error_stream_explicit
+                StreamResolveException.Reason.NO_MUSIC_VIDEO -> R.string.error_stream_no_music_video
+                StreamResolveException.Reason.NETWORK -> R.string.error_stream_network
+                else -> R.string.error_resolve_failed
+            }
+            else -> R.string.error_resolve_failed
+        }
+        return app.getString(res)
     }
 
     fun skipToNext() {
