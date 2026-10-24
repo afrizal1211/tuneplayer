@@ -19,6 +19,7 @@ import com.tuneplayer.app.TunePlayerApp
 import com.tuneplayer.app.data.prefs.SettingsStore
 import com.tuneplayer.app.log.LogCatcher
 import com.tuneplayer.app.playback.smart.TempoEstimator
+import com.tuneplayer.app.playback.smart.TransitionPlan
 import com.tuneplayer.app.playback.smart.TransitionPlanner
 import com.tuneplayer.app.playback.smart.TransitionStyle
 import com.tuneplayer.app.playback.smart.TransitionTrackInfo
