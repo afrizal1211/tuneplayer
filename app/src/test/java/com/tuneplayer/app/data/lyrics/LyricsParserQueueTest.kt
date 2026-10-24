@@ -1,6 +1,7 @@
 package com.tuneplayer.app.data.lyrics
 
 import com.tuneplayer.app.data.model.Track
+import com.tuneplayer.app.playback.QueueBuilder
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
