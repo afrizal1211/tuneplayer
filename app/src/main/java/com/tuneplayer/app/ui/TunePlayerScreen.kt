@@ -7,6 +7,8 @@ import android.text.format.Formatter
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -127,10 +129,12 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -142,6 +146,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
@@ -167,6 +172,7 @@ import com.tuneplayer.app.data.model.LibrarySort
 import com.tuneplayer.app.data.model.Track
 import com.tuneplayer.app.data.prefs.PlaylistStore
 import com.tuneplayer.app.data.youtube.YouTubeSearchFilter
+import com.tuneplayer.app.ui.theme.ArtworkGradient
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.BasicTextField
@@ -1037,6 +1043,7 @@ private fun LibraryFilterBar(
 private fun LyricsSource.labelRes(): Int = when (this) {
     LyricsSource.YouTube -> R.string.lyrics_source_youtube
     LyricsSource.Lrclib -> R.string.lyrics_source_lrclib
+    LyricsSource.Ovh -> R.string.lyrics_source_ovh
 }
 
 private fun LibrarySort.labelRes(): Int = when (this) {
@@ -2659,23 +2666,50 @@ private fun NowPlayingSheet(
     val sideButtonSize = 56.dp
     val centerButtonSize = 72.dp
 
+    // Backdrop tinted by the artwork's own colors, crossfaded when the track
+    // changes so the sheet never snaps between two palettes.
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val gradientStops = remember { mutableStateOf<List<androidx.compose.ui.graphics.Color>?>(null) }
+    LaunchedEffect(track.artworkUri) {
+        val uri = track.artworkUri ?: return@LaunchedEffect
+        scope.launch {
+            val colors = ArtworkGradient.fromUri(uri, context)
+            gradientStops.value = colors
+        }
+    }
+    val surface = MaterialTheme.colorScheme.surface
+    val topColor by animateColorAsState(
+        targetValue = gradientStops.value?.firstOrNull()
+            ?.let { it.copy(alpha = 0.55f) } ?: surface,
+        animationSpec = tween(450),
+        label = "gradientTop",
+    )
+    val bottomColor by animateColorAsState(
+        targetValue = gradientStops.value?.getOrNull(1)
+            ?.let { it.copy(alpha = 0.32f) } ?: surface,
+        animationSpec = tween(450),
+        label = "gradientBottom",
+    )
+
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
     ) {
         Box(modifier = Modifier.fillMaxWidth()) {
-            // Gradient backdrop: primary-tinted top fading into surface.
+            // Artwork-derived gradient, softly blended into the sheet surface.
             Box(
                 modifier = Modifier
                     .matchParentSize()
                     .background(
                         Brush.verticalGradient(
                             colors = listOf(
-                                MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
-                                MaterialTheme.colorScheme.surface,
+                                topColor,
+                                lerp(topColor, surface, 0.55f),
+                                bottomColor,
                             ),
                             startY = 0f,
-                            endY = 600f,
+                            endY = 900f,
                         ),
                     ),
             )
@@ -2996,7 +3030,10 @@ private fun LyricsSheet(
     onRefreshLyrics: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -3005,14 +3042,31 @@ private fun LyricsSheet(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             if (track == null) {
-                Text(stringResource(R.string.lyrics_nothing), style = MaterialTheme.typography.titleMedium)
+                Text(
+                    stringResource(R.string.lyrics_nothing),
+                    style = MaterialTheme.typography.titleMedium,
+                )
                 return@Column
             }
-            Artwork(track = track, size = 120)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+            ) {
+                IconButton(onClick = onDismiss) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = stringResource(R.string.action_close),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            Artwork(track = track, size = 120, cornerRadius = 16, shadowElevation = 8)
             Spacer(Modifier.height(16.dp))
             Text(
                 text = track.title,
                 style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold,
+                textAlign = TextAlign.Center,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )

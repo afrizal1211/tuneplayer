@@ -4,6 +4,7 @@ package com.tuneplayer.app.data.lyrics
 enum class LyricsSource {
     YouTube,
     Lrclib,
+    Ovh,
 }
 
 data class LyricsLookup(

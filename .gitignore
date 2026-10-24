@@ -9,3 +9,6 @@ app/debug/
 *.jks
 *.keystore
 keystore.properties
+
+# Kotlin compiler scratch output
+.kotlin/

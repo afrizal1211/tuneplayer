@@ -173,6 +173,7 @@
     <string name="lyrics_source">ソース: %1$s</string>
     <string name="lyrics_source_youtube">YouTube Music</string>
     <string name="lyrics_source_lrclib">LRCLIB</string>
+    <string name="lyrics_source_ovh">lyrics.ovh</string>
     <string name="search_suggestions_title">検索候補</string>
     <string name="search_recommendations_title">おすすめ</string>
     <string name="search_filter_all">すべて</string>

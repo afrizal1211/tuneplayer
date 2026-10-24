@@ -6,6 +6,7 @@ import com.tuneplayer.app.data.downloads.OfflineDownloadManager
 import com.tuneplayer.app.data.local.LocalMusicRepository
 import com.tuneplayer.app.data.lyrics.LrclibLyricsRepository
 import com.tuneplayer.app.data.lyrics.LyricsCache
+import com.tuneplayer.app.data.lyrics.OvhLyricsRepository
 import com.tuneplayer.app.data.prefs.FavoriteStore
 import com.tuneplayer.app.data.prefs.SettingsStore
 import com.tuneplayer.app.data.youtube.YouTubeMusicRepository
@@ -52,6 +53,10 @@ class TunePlayerApp : Application() {
 
     val lrclibLyricsRepository: LrclibLyricsRepository by lazy {
         LrclibLyricsRepository()
+    }
+
+    val ovhLyricsRepository: OvhLyricsRepository by lazy {
+        OvhLyricsRepository()
     }
 
     val lyricsCache: LyricsCache by lazy {

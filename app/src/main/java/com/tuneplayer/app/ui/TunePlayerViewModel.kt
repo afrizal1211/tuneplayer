@@ -131,6 +131,7 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
     private val localRepository = app.localMusicRepository
     private val youTubeRepository = app.youTubeMusicRepository
     private val lrclibLyricsRepository = app.lrclibLyricsRepository
+    private val ovhLyricsRepository = app.ovhLyricsRepository
     private var searchJob: Job? = null
     private var searchSuggestionsJob: Job? = null
     private val favoriteStore = app.favoriteStore
@@ -347,13 +348,18 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
         updateDiscordPresence()
     }
 
-    /** Mirrors ExoPlayer's own auto-advance (shuffle, repeat-one, next track) into uiState. */
+    /**
+     * Mirrors ExoPlayer's own auto-advance (shuffle, repeat, next track) into uiState.
+     *
+     * The item is identified by media id, never by index: with shuffle enabled
+     * the player's indices address the *shuffled* timeline, so mapping a player
+     * index back through the queue order silently points at the wrong track.
+     */
     private fun syncQueueIndexFromPlayer() {
         val player = controller ?: return
-        val playerIndex = player.currentMediaItemIndex
-        if (playerIndex !in playerIndexToQueueIndex.indices) return
-        val index = playerIndexToQueueIndex[playerIndex]
-        if (index in uiState.playbackQueue.indices && index != uiState.queueIndex) {
+        val mediaId = player.currentMediaItem?.mediaId ?: return
+        val index = uiState.playbackQueue.indexOfFirst { it.id == mediaId }
+        if (index >= 0 && index != uiState.queueIndex) {
             val track = uiState.playbackQueue[index]
             uiState = uiState.copy(queueIndex = index, currentTrack = track, audioInfo = null)
             clearLyricsState()
@@ -364,12 +370,12 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     private fun advanceAfterTrackEnded() {
-        if (uiState.repeatMode == Player.REPEAT_MODE_ONE) return
+        // Repeat-one loops the item; repeat-all and shuffle both keep going on
+        // their own. Only the exhausted, unshuffled, non-repeating queue stops.
+        if (uiState.repeatMode != Player.REPEAT_MODE_OFF) return
+        if (uiState.isShuffleEnabled) return
         if (uiState.queueIndex < uiState.playbackQueue.lastIndex) return
-        if (!uiState.isShuffleEnabled && uiState.repeatMode == Player.REPEAT_MODE_OFF) {
-            // Queue exhausted: stop rather than looping back to the top.
-            uiState = uiState.copy(isPlaying = false)
-        }
+        uiState = uiState.copy(isPlaying = false)
     }
 
     fun toggleShuffle() {
@@ -377,6 +383,8 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
         val enabled = !player.shuffleModeEnabled
         player.shuffleModeEnabled = enabled
         uiState = uiState.copy(isShuffleEnabled = enabled)
+        // Media3 reorders its own timeline when shuffle turns on; the current
+        // item keeps playing, so re-sync the queue pointer to it.
         syncQueueIndexFromPlayer()
     }
 
@@ -603,23 +611,37 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
         viewModelScope.launch {
             uiState = uiState.copy(error = null)
 
-            // Enqueue without disturbing an existing queue slot, then play.
-            enqueue(track)
-            val index = uiState.queueIndex
-            pushQueueToPlayer(uiState.playbackQueue, index)
+            // A single tap on a song seeds the queue with its siblings so the
+            // player has somewhere to go when the track ends.
+            val seeded = autoQueueSeed(track)
+            val index = seeded.indexOfFirst { it.id == track.id }
+                .takeIf { it >= 0 } ?: seeded.lastIndex
+            uiState = uiState.copy(playbackQueue = seeded, queueIndex = index)
+            pushQueueToPlayer(seeded, index)
             startTrack(track)
         }
     }
 
-    /** Adds [track] to the queue and points [TunePlayerUiState.queueIndex] at it. */
-    private fun enqueue(track: Track) {
-        val queue = uiState.playbackQueue
-        val existing = queue.indexOfFirst { it.id == track.id }
-        val newQueue = if (existing >= 0) queue else queue + track
-        val newIndex = if (existing >= 0) existing else newQueue.lastIndex
-        uiState = uiState.copy(playbackQueue = newQueue, queueIndex = newIndex)
+    /**
+     * Builds the queue to start from when the user picks [track] by hand.
+     *
+     * Returns [track] alone when the queue is already populated (an explicit
+     * queue is never clobbered) or when nothing else is known. Otherwise the
+     * rest of the library follows in display order, starting at [track], so a
+     * queue that is currently exhausted or single-track gains a real playlist.
+     */
+    private fun autoQueueSeed(track: Track): List<Track> {
+        if (uiState.playbackQueue.size > 1) return uiState.playbackQueue
+        val siblings = (visibleLocalTracks + uiState.searchResults + uiState.downloadedTracks)
+            .filter { it.id != track.id }
+            .distinctBy { it.id }
+        if (siblings.isEmpty()) return listOf(track)
+        val index = siblings.indexOfFirst { it.id == track.id }
+        if (index < 0) return listOf(track) + siblings
+        return siblings.subList(index, siblings.size) + siblings.subList(0, index)
     }
 
+    /** Adds [track] to the queue and points [TunePlayerUiState.queueIndex] at it. */
     private suspend fun startTrack(track: Track) {
         val offlineUri = app.offlineDownloadManager.localUri(track.id)
         if (offlineUri != null) {
@@ -926,13 +948,17 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
         uiState = uiState.copy(searchHistory = emptyList())
     }
 
+    /** Appends [track] to the end of the queue without disturbing playback. */
     fun addToQueue(track: Track) {
         val wasEmpty = uiState.playbackQueue.isEmpty()
-        enqueue(track)
+        val queue = uiState.playbackQueue
+        if (queue.any { it.id == track.id }) return
+        val newQueue = queue + track
+        uiState = uiState.copy(playbackQueue = newQueue)
         if (wasEmpty) {
-            playFromQueue(uiState.playbackQueue, uiState.queueIndex)
+            playFromQueue(newQueue, 0)
         } else {
-            pushQueueToPlayer(uiState.playbackQueue, uiState.queueIndex)
+            pushQueueToPlayer(newQueue, uiState.queueIndex)
         }
     }
 
@@ -997,21 +1023,23 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
     /**
      * Loads [queue] into ExoPlayer so the platform handles auto-advance,
      * shuffle, and repeat. Remote tracks without a cached URI are skipped, so
-     * [playerIndexToQueueIndex] keeps uiState aligned with the player's own
-     * (smaller) item list.
+     * the player's item list can be shorter than [queue]; matching back by
+     * media id keeps uiState aligned with what is actually playing.
      */
     private fun pushQueueToPlayer(queue: List<Track>, startIndex: Int) {
         val player = controller ?: return
-        val built = mutableListOf<Pair<MediaItem, Int>>()
+        val items = mutableListOf<MediaItem>()
+        val queueIndexes = mutableListOf<Int>()
         queue.forEachIndexed { index, track ->
             val uri = playbackUri(track) ?: return@forEachIndexed
-            built += buildMediaItem(track, uri, null) to index
+            items += buildMediaItem(track, uri, null)
+            queueIndexes += index
         }
-        if (built.isEmpty()) return
-        playerIndexToQueueIndex = built.map { it.second }
-        val playerStart = playerIndexToQueueIndex.indexOfFirst { it >= startIndex }
+        if (items.isEmpty()) return
+        playerIndexToQueueIndex = queueIndexes
+        val playerStart = queueIndexes.indexOfFirst { it >= startIndex }
             .takeIf { it >= 0 } ?: 0
-        player.setMediaItems(built.map { it.first }, playerStart, 0L)
+        player.setMediaItems(items, playerStart, 0L)
         persistQueue()
     }
 
@@ -1425,7 +1453,6 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
 
     /** Warms the cache so downloaded tracks still show lyrics without a network. */
     private fun prefetchLyrics(track: Track) {
-        if (track.isLocal) return
         val cached = app.lyricsCache.get(track.id)
         if (cached != null) {
             if (uiState.currentTrack?.id == track.id && uiState.lyrics == null) {
@@ -1507,6 +1534,16 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
                 text = external.text
                 source = external.source
                 synced = external.synced
+            }
+        }
+        // Last resort: lyrics.ovh, which only ever answers with plain text.
+        if (text.isNullOrBlank()) {
+            val ovh = withTimeoutOrNull(10_000L) {
+                runCatching { ovhLyricsRepository.find(track) }.getOrNull()
+            }
+            if (ovh != null) {
+                text = ovh.text
+                source = ovh.source
             }
         }
         val finalText = text?.takeIf { it.isNotBlank() } ?: return null
@@ -1645,8 +1682,11 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
         }
 
         val mediaItem = buildMediaItem(track, uri, mimeType)
-        val playerIndex = playerIndexToQueueIndex.indexOf(uiState.queueIndex)
-        if (playerIndex >= 0 && playerIndex < player.mediaItemCount) {
+        // Match by media id: player indices follow the shuffle order, not the
+        // queue order, so an index lookup can land on a different track.
+        val playerIndex = (0 until player.mediaItemCount)
+            .firstOrNull { player.getMediaItemAt(it).mediaId == track.id }
+        if (playerIndex != null) {
             player.replaceMediaItem(playerIndex, mediaItem)
             player.seekTo(playerIndex, 0L)
         } else {
