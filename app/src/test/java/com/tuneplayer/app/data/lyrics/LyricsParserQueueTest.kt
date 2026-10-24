@@ -67,9 +67,9 @@ class LyricsParserTest {
     }
 
     @Test
-    fun `strips packaging from plain text`() {
+    fun `keeps the sung text verbatim, packaging included`() {
         val lines = LyricsParser.parse("[00:01.00]Song (Official Video)")
-        assertEquals("Song", lines[0].text)
+        assertEquals("Song (Official Video)", lines[0].text)
     }
 
     @Test
