@@ -56,7 +56,7 @@ object StreamHeaders {
  */
 @UnstableApi
 private class StreamHeaderResolver : ResolvingDataSource.Resolver {
-    override fun resolve(dataSpec: DataSpec): DataSpec {
+    override fun resolveDataSpec(dataSpec: DataSpec): DataSpec {
         val signed = StreamHeaders.forUri(dataSpec.uri.toString()) ?: return dataSpec
         return dataSpec.buildUpon()
             .setHttpRequestHeaders(dataSpec.httpRequestHeaders + signed)
