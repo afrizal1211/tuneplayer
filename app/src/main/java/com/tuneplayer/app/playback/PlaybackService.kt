@@ -32,6 +32,16 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
+/** Whether two media items belong to the same album by the same artist. */
+internal fun sameAlbum(left: MediaItem, right: MediaItem): Boolean {
+    val leftAlbum = left.mediaMetadata.albumTitle?.toString()?.takeIf { it.isNotBlank() }
+    val rightAlbum = right.mediaMetadata.albumTitle?.toString()?.takeIf { it.isNotBlank() }
+    if (leftAlbum == null || rightAlbum == null || leftAlbum != rightAlbum) return false
+    val leftArtist = left.mediaMetadata.artist?.toString()?.takeIf { it.isNotBlank() }
+    val rightArtist = right.mediaMetadata.artist?.toString()?.takeIf { it.isNotBlank() }
+    return leftArtist == null || rightArtist == null || leftArtist == rightArtist
+}
+
 /**
  * Keys shared between the ViewModel that builds the queue and the playback
  * service that reads it.
@@ -61,6 +71,8 @@ class PlaybackService : MediaSessionService() {
     private var crossfadeOutgoingMediaId: String? = null
     private var crossfadeBaseVolume = 1f
     private var crossfadePlaybackRequested = false
+    /** In-flight tempo decodes, keyed by media id so the two tracks of a pair do not cancel each other. */
+    private val tempoWarmJobs = mutableMapOf<String, Job>()
 
     private val settingsStore: SettingsStore
         get() = (application as TunePlayerApp).settingsStore
@@ -203,10 +215,19 @@ class PlaybackService : MediaSessionService() {
         val outgoingMediaId = player.currentMediaItem?.mediaId ?: return
         val currentItem = player.currentMediaItem ?: return
 
+        // Warm the tempo cache as soon as a track starts, not when its blend
+        // opens. Both decodes take a few seconds; doing them up front means the
+        // plan is usually ready by the time it is needed, and a cache miss at
+        // blend time costs one decode rather than the blend's timing.
+        if (settingsStore.automixEnabled) {
+            warmTempoCache(currentItem, outgoingMediaId)
+            warmTempoCache(target, target.mediaId)
+        }
+
         crossfadeTriggerJob = scope.launch {
-            // Automix plans the blend from each track's tempo, which needs a
-            // decode. It runs here, before the trigger point is fixed, and the
-            // plain crossfade is used whenever it cannot answer.
+            // Automix plans the blend from each track's tempo. The decode has
+            // usually already run during the warm-up, so this normally only
+            // reads the cache; when it does miss, the plain crossfade is used.
             val automix = settingsStore.automixEnabled
             val blendMs = if (automix) {
                 val tempoEstimator = TempoEstimator(this@PlaybackService)
@@ -227,6 +248,11 @@ class PlaybackService : MediaSessionService() {
                     ),
                     currentBpm = outgoingBpm,
                     nextBpm = incomingBpm,
+                    // Gapless belongs to an album played through, which the
+                    // listener can recognise by the two tracks sharing an album.
+                    // Both titles come from the item metadata, so this needs no
+                    // extra plumbing and is simply false when either is unknown.
+                    albumSequential = sameAlbum(currentItem, target),
                     currentTime = player.currentPosition / 1000.0,
                     duration = duration / 1000.0,
                     fadeSeconds = durationMs / 1000.0,
@@ -267,6 +293,26 @@ class PlaybackService : MediaSessionService() {
                     else -> 50L
                 }.coerceAtMost(remaining).coerceAtLeast(1L)
                 delay(sleep)
+            }
+        }
+    }
+
+    /**
+     * Decodes [mediaItem] in the background so its tempo is cached before the
+     * blend needs it.
+     *
+     * A track's tempo never changes, so one decode per track is enough. The job
+     * is cancelled rather than awaited when the next track starts, which is
+     * safe: the cache is keyed by media id and a miss is answered by falling
+     * back to the plain crossfade.
+     */
+    private fun warmTempoCache(mediaItem: MediaItem, cacheKey: String) {
+        tempoWarmJobs.remove(cacheKey)?.cancel()
+        tempoWarmJobs[cacheKey] = scope.launch {
+            try {
+                TempoEstimator(this@PlaybackService).estimate(mediaItem, cacheKey)
+            } finally {
+                tempoWarmJobs.remove(cacheKey)
             }
         }
     }
@@ -479,6 +525,8 @@ class PlaybackService : MediaSessionService() {
 
     override fun onDestroy() {
         settingsStore.unregisterListener(audioSettingsListener)
+        tempoWarmJobs.values.forEach { it.cancel() }
+        tempoWarmJobs.clear()
         player?.removeListener(playerListener)
         cancelCrossfade(resetVolume = false)
         scope.cancel()
