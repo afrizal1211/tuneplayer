@@ -80,6 +80,13 @@ private data class HomeShelf(
 class YouTubeMusicRepository {
 
     companion object {
+        /** Refusals no retry will soften. */
+        private val TERMINAL_REASONS = setOf(
+            StreamResolveException.Reason.EXPLICIT_UNSUPPORTED,
+            StreamResolveException.Reason.UNAVAILABLE,
+            StreamResolveException.Reason.AGE_RESTRICTED,
+        )
+
         private const val WEB_USER_AGENT =
             "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 " +
                 "(KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
