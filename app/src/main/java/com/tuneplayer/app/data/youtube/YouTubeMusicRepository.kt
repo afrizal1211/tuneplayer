@@ -90,6 +90,9 @@ class YouTubeMusicRepository {
         private val HOME_RECOMMENDATION_MARKERS =
             listOf("quick", "pick", "recommend", "mix", "trending")
         private val HOME_AVOID_MARKERS = listOf("recent", "history", "listen again")
+
+        /** How long a stream probe may take before the URL is written off. */
+        private const val PROBE_TIMEOUT_MS = 4_000L
     }
 
     private val json = Json {
@@ -504,26 +507,73 @@ class YouTubeMusicRepository {
         videoId: String,
         quality: YouTubeAudioQuality = YouTubeAudioQuality.High,
     ): ResolvedAudio {
-        val stream = extractor.extract(
-            videoId = videoId,
-            hints = ContentHints(wantVideo = false)
-                .withStreamCapabilities(allowHls = false, allowSabr = false),
-            audioQuality = quality.toInnerTubeQuality(),
-        ) ?: error("YouTube Music returned no playable audio stream.")
+        // A client whose URL fails the probe is skipped and the next asked, so
+        // one minted-but-dead URL does not fail the track. Each attempt pays a
+        // full client walk, so the budget is bounded.
+        val clients = STREAM_CLIENT_FALLBACK_ORDER.take(STREAM_RESOLVE_ATTEMPTS)
+        var lastError: Exception? = null
 
-        val requestHeaders = stream.headers
-            .plus("User-Agent" to WEB_USER_AGENT)
-            .plus("Referer" to "https://music.youtube.com/")
-            .plus("Origin" to "https://music.youtube.com")
+        for (client in clients) {
+            val stream = try {
+                extractor.extract(
+                    videoId = videoId,
+                    hints = ContentHints(wantVideo = false)
+                        .withStreamCapabilities(allowHls = false, allowSabr = false)
+                        .copy(playbackClientOverrideId = client.clientName),
+                    audioQuality = quality.toInnerTubeQuality(),
+                )
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                lastError = error
+                null
+            } ?: continue
 
-        RESOLVED_HEADERS[stream.audioUrl] = requestHeaders
+            val requestHeaders = stream.headers
+                .plus("User-Agent" to WEB_USER_AGENT)
+                .plus("Referer" to "https://music.youtube.com/")
+                .plus("Origin" to "https://music.youtube.com")
 
-        return ResolvedAudio(
-            url = stream.audioUrl,
-            mimeType = stream.mimeType,
-            headers = requestHeaders,
-            codec = AudioInfo.codecLabel(stream.mimeType),
-        )
+            // Nothing is handed to the player, or cached, until bytes have
+            // been fetched from the URL.
+            if (probeStream(stream.audioUrl, requestHeaders) != StreamProbe.OK) continue
+
+            RESOLVED_HEADERS[stream.audioUrl] = requestHeaders
+            return ResolvedAudio(
+                url = stream.audioUrl,
+                mimeType = stream.mimeType,
+                headers = requestHeaders,
+                codec = AudioInfo.codecLabel(stream.mimeType),
+            )
+        }
+
+        throw lastError ?: error("YouTube Music returned no playable audio stream.")
+    }
+
+    /**
+     * Fetches a byte range from [url] to confirm it is really serving audio.
+     *
+     * A URL can be dead on arrival for reasons no amount of care predicts, so
+     * this runs before anything is cached or handed to ExoPlayer.
+     */
+    private suspend fun probeStream(
+        url: String,
+        requestHeaders: Map<String, String>,
+    ): StreamProbe {
+        val status = withTimeoutOrNull(PROBE_TIMEOUT_MS) {
+            runCatching {
+                httpClient.get(url) {
+                    requestHeaders.forEach { (key, value) -> header(key, value) }
+                    header("User-Agent", WEB_USER_AGENT)
+                    header("Range", "bytes=0-1023")
+                }.status
+            }.getOrNull()
+        } ?: return StreamProbe.UNREACHABLE
+        return if (status.value in 200..299 || status.value == 206) {
+            StreamProbe.OK
+        } else {
+            StreamProbe.REFUSED
+        }
     }
 
     /**

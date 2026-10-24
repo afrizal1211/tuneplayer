@@ -10,6 +10,7 @@ import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import android.os.Bundle
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
@@ -40,10 +41,15 @@ import com.tuneplayer.app.data.discord.deriveRawDiscordPresenceDecision
 import com.tuneplayer.app.data.discord.resolveDiscordPresenceDecision
 import com.tuneplayer.app.data.prefs.AppTheme
 import com.tuneplayer.app.data.prefs.FavoriteStore
-import com.tuneplayer.app.data.lyrics.LrcParser
+import com.tuneplayer.app.data.lyrics.LyricsLine
+import com.tuneplayer.app.data.lyrics.LyricsParser
+import com.tuneplayer.app.data.lyrics.KuGouLyricsRepository
+import com.tuneplayer.app.data.lyrics.activeLineIndex
+import com.tuneplayer.app.data.lyrics.activeWordIndex
 import com.tuneplayer.app.data.lyrics.LyricsLookup
 import com.tuneplayer.app.data.lyrics.LyricsSource
 import com.tuneplayer.app.playback.PlaybackService
+import com.tuneplayer.app.playback.QueueBuilder
 import com.tuneplayer.app.widget.NowPlayingWidget
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -82,6 +88,9 @@ data class TunePlayerUiState(
     val sleepFinishTrack: Boolean = false,
     val keepScreenOn: Boolean = false,
     val skipSilence: Boolean = false,
+    val crossfadeEnabled: Boolean = false,
+    val crossfadeDurationSeconds: Float = 5f,
+    val automixEnabled: Boolean = false,
     val hapticsEnabled: Boolean = true,
     val gridLayout: Boolean = false,
     val dynamicColor: Boolean = true,
@@ -101,8 +110,10 @@ data class TunePlayerUiState(
     val virtualizerLevel: Int = 0,
     val lyrics: String? = null,
     val isLoadingLyrics: Boolean = false,
-    val syncedLyrics: List<LrcParser.LrcLine> = emptyList(),
+    val syncedLyrics: List<LyricsLine> = emptyList(),
     val activeLyricIndex: Int = -1,
+    /** Word within [activeLyricIndex] currently being sung, or -1 for line-only lyrics. */
+    val activeWordIndex: Int = -1,
     val positionMs: Long = 0L,
     val durationMs: Long = 0L,
     val isShuffleEnabled: Boolean = false,
@@ -132,6 +143,7 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
     private val youTubeRepository = app.youTubeMusicRepository
     private val lrclibLyricsRepository = app.lrclibLyricsRepository
     private val ovhLyricsRepository = app.ovhLyricsRepository
+    private val kuGouLyricsRepository = KuGouLyricsRepository()
     private var searchJob: Job? = null
     private var searchSuggestionsJob: Job? = null
     private val favoriteStore = app.favoriteStore
@@ -322,12 +334,17 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
                 }
                 val lines = uiState.syncedLyrics
                 if (lines.isNotEmpty()) {
-                    val idx = LrcParser.activeIndex(
-                        lines,
-                        (uiState.positionMs - uiState.lyricsOffsetMs).coerceAtLeast(0L),
-                    )
+                    val position = (uiState.positionMs - uiState.lyricsOffsetMs).coerceAtLeast(0L)
+                    val idx = activeLineIndex(lines, position)
+                    val word = if (idx == uiState.activeLyricIndex) {
+                        uiState.activeWordIndex
+                    } else {
+                        activeWordIndex(lines[idx], position)
+                    }
                     if (idx != uiState.activeLyricIndex) {
-                        uiState = uiState.copy(activeLyricIndex = idx)
+                        uiState = uiState.copy(activeLyricIndex = idx, activeWordIndex = word)
+                    } else if (word != uiState.activeWordIndex) {
+                        uiState = uiState.copy(activeWordIndex = word)
                     }
                 }
                 delay(250)
@@ -640,7 +657,11 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
         if (pool.isEmpty()) return listOf(track)
         val start = pool.indexOfFirst { it.id == track.id }
         if (start < 0) return listOf(track) + pool
-        return pool.subList(start, pool.size) + pool.subList(0, start)
+        val ordered = pool.subList(start, pool.size) + pool.subList(0, start)
+        // Drop the duplicate cuts and cap how much of one artist a station
+        // carries, so the seed is a mix rather than a discography.
+        return QueueBuilder.extend(listOf(track), ordered.drop(1), limit = 50)
+            .let { listOf(track) + it }
     }
 
     /** Adds [track] to the queue and points [TunePlayerUiState.queueIndex] at it. */
@@ -934,6 +955,21 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
         uiState = uiState.copy(skipSilence = enabled)
     }
 
+    /** Persisted for the service, which re-arms the blend on the next track. */
+    fun setCrossfade(enabled: Boolean, durationSeconds: Float) {
+        app.settingsStore.crossfadeEnabled = enabled
+        app.settingsStore.crossfadeDurationSeconds = durationSeconds
+    }
+
+    fun setAutomixEnabled(enabled: Boolean) {
+        app.settingsStore.automixEnabled = enabled
+        uiState = uiState.copy(automixEnabled = enabled)
+        uiState = uiState.copy(
+            crossfadeEnabled = enabled,
+            crossfadeDurationSeconds = app.settingsStore.crossfadeDurationSeconds,
+        )
+    }
+
     fun setHapticsEnabled(enabled: Boolean) {
         app.settingsStore.hapticsEnabled = enabled
         uiState = uiState.copy(hapticsEnabled = enabled)
@@ -1001,6 +1037,7 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
             lyrics = null,
             syncedLyrics = emptyList(),
             activeLyricIndex = -1,
+            activeWordIndex = -1,
             lyricsSource = null,
             isLoadingLyrics = false,
         )
@@ -1196,6 +1233,9 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
             gridLayout = settings.gridLayout,
             keepScreenOn = settings.keepScreenOn,
             skipSilence = settings.skipSilence,
+            crossfadeEnabled = settings.crossfadeEnabled,
+            crossfadeDurationSeconds = settings.crossfadeDurationSeconds,
+            automixEnabled = settings.automixEnabled,
             hapticsEnabled = settings.hapticsEnabled,
             dynamicColor = settings.dynamicColor,
             pureBlack = settings.pureBlack,
@@ -1427,12 +1467,16 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
         val active = if (lines.isEmpty()) {
             -1
         } else {
-            LrcParser.activeIndex(
+            activeLineIndex(
                 lines,
                 (uiState.positionMs - clamped).coerceAtLeast(0L),
             )
         }
-        uiState = uiState.copy(lyricsOffsetMs = clamped, activeLyricIndex = active)
+        uiState = uiState.copy(
+            lyricsOffsetMs = clamped,
+            activeLyricIndex = active,
+            activeWordIndex = -1,
+        )
     }
 
     fun loadLyrics() {
@@ -1480,6 +1524,7 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
                 lyrics = null,
                 syncedLyrics = emptyList(),
                 activeLyricIndex = -1,
+                activeWordIndex = -1,
                 lyricsSource = null,
             )
         }
@@ -1493,6 +1538,7 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
                             lyrics = null,
                             syncedLyrics = emptyList(),
                             activeLyricIndex = -1,
+                            activeWordIndex = -1,
                             lyricsSource = null,
                         )
                     }
@@ -1524,10 +1570,11 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
         }
         var text = youtubeText
         var source = if (!text.isNullOrBlank()) LyricsSource.YouTube else null
-        var synced = LrcParser.parse(text).isNotEmpty()
+        var synced = LyricsParser.parse(text).isNotEmpty()
 
-        // YouTube timedtext is often plain text. LRCLIB can still supply line
-        // timing, so try it whenever we have no LRC.
+        // YouTube timedtext is often plain text, and LRCLIB only line-times. Both
+        // are asked before KuGou so word-synced lyrics win only when nothing
+        // better is available, and KuGou still gets a turn at the text itself.
         if (!synced) {
             val external = withTimeoutOrNull(10_000L) {
                 runCatching { lrclibLyricsRepository.find(track) }.getOrNull()
@@ -1536,6 +1583,18 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
                 text = external.text
                 source = external.source
                 synced = external.synced
+            }
+        }
+        // KuGou is the one key-less source that word-times, so it is consulted
+        // even when line timing already answered.
+        if (!synced) {
+            val kugou = withTimeoutOrNull(10_000L) {
+                runCatching { kuGouLyricsRepository.find(track) }.getOrNull()
+            }
+            if (kugou != null && (text.isNullOrBlank() || kugou.wordSynced)) {
+                text = kugou.text
+                source = kugou.source
+                synced = kugou.synced
             }
         }
         // Last resort: lyrics.ovh, which only ever answers with plain text.
@@ -1551,27 +1610,23 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
         val finalText = text?.takeIf { it.isNotBlank() } ?: return null
         return LyricsLookup(
             text = finalText,
-            synced = LrcParser.parse(finalText).isNotEmpty(),
+            synced = LyricsParser.parse(finalText).isNotEmpty(),
             source = source ?: LyricsSource.YouTube,
         )
     }
 
     private fun applyLyrics(trackId: String, lookup: LyricsLookup) {
         if (uiState.currentTrack?.id != trackId) return
-        val synced = LrcParser.parse(lookup.text)
-        val active = if (synced.isEmpty()) {
-            -1
-        } else {
-            LrcParser.activeIndex(
-                synced,
-                (uiState.positionMs - uiState.lyricsOffsetMs).coerceAtLeast(0L),
-            )
-        }
+        val synced = LyricsParser.parse(lookup.text)
+        val position = (uiState.positionMs - uiState.lyricsOffsetMs).coerceAtLeast(0L)
+        val active = if (synced.isEmpty()) -1 else activeLineIndex(synced, position)
+        val word = if (active >= 0) activeWordIndex(synced[active], position) else -1
         uiState = uiState.copy(
             isLoadingLyrics = false,
             lyrics = lookup.text,
             syncedLyrics = synced,
             activeLyricIndex = active,
+            activeWordIndex = word,
             lyricsSource = lookup.source,
         )
     }
@@ -1585,6 +1640,7 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
             lyrics = null,
             syncedLyrics = emptyList(),
             activeLyricIndex = -1,
+            activeWordIndex = -1,
             lyricsSource = null,
         )
     }
@@ -1703,6 +1759,7 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
             lyrics = null,
             syncedLyrics = emptyList(),
             activeLyricIndex = -1,
+            activeWordIndex = -1,
             lyricsSource = null,
             isLoadingLyrics = false,
         )
@@ -1752,6 +1809,9 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
             .setArtist(track.artist)
             .setAlbumTitle(track.album)
             .setArtworkUri(track.artworkUri?.let(Uri::parse))
+            // The playback service plans crossfade length against the incoming
+            // track's real duration, and cannot read that until it prepares.
+            .setExtras(Bundle().apply { putLong(EXTRA_TRACK_DURATION_MS, track.durationMs) })
             .build()
         return MediaItem.Builder()
             .setMediaId(track.id)

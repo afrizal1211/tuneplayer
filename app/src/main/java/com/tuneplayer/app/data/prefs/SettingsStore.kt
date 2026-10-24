@@ -96,6 +96,37 @@ class SettingsStore(context: Context) {
             prefs.edit().putBoolean(KEY_SKIP_SILENCE, value).apply()
         }
 
+    /** Blends the end of one track into the start of the next. */
+    var crossfadeEnabled: Boolean
+        get() = prefs.getBoolean(KEY_CROSSFADE_ENABLED, false)
+        set(value) {
+            prefs.edit().putBoolean(KEY_CROSSFADE_ENABLED, value).apply()
+        }
+
+    /** Blend length in seconds; 0 disables the feature even when [crossfadeEnabled]. */
+    var crossfadeDurationSeconds: Float
+        get() = prefs.getFloat(KEY_CROSSFADE_SECONDS, 5f).coerceIn(0f, 12f)
+        set(value) {
+            prefs.edit().putFloat(KEY_CROSSFADE_SECONDS, value.coerceIn(0f, 12f)).apply()
+        }
+
+    /** Blend length in milliseconds, derived from [crossfadeDurationSeconds]. */
+    val crossfadeDurationMs: Long
+        get() = (crossfadeDurationSeconds * 1000).toLong()
+
+    /**
+     * Beat-aware blending, on top of the plain crossfade.
+     *
+     * When on, transitions are planned from each track's tempo instead of
+     * being a fixed-length blend. Automix needs an audio decode to estimate
+     * tempo, so it falls back to the plain crossfade whenever that fails.
+     */
+    var automixEnabled: Boolean
+        get() = prefs.getBoolean(KEY_AUTOMIX_ENABLED, false)
+        set(value) {
+            prefs.edit().putBoolean(KEY_AUTOMIX_ENABLED, value).apply()
+        }
+
     var keepScreenOn: Boolean
         get() = prefs.getBoolean(KEY_KEEP_SCREEN_ON, false)
         set(value) {
@@ -221,6 +252,9 @@ class SettingsStore(context: Context) {
         const val KEY_DYNAMIC_COLOR = "dynamic_color"
         const val KEY_PURE_BLACK = "pure_black"
         const val KEY_SKIP_SILENCE = "skip_silence"
+        const val KEY_CROSSFADE_ENABLED = "crossfade_enabled"
+        const val KEY_CROSSFADE_SECONDS = "crossfade_seconds"
+        const val KEY_AUTOMIX_ENABLED = "automix_enabled"
         const val KEY_KEEP_SCREEN_ON = "keep_screen_on"
         const val KEY_HAPTICS = "haptics"
         const val KEY_SEARCH_HISTORY = "search_history"

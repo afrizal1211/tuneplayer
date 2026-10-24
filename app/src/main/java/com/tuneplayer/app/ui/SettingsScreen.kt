@@ -52,6 +52,9 @@ fun SettingsScreen(
     bassBoostLevel: Int,
     virtualizerLevel: Int,
     skipSilence: Boolean,
+    crossfadeEnabled: Boolean,
+    crossfadeDurationSeconds: Float,
+    automixEnabled: Boolean,
     keepScreenOn: Boolean,
     hapticsEnabled: Boolean,
     dynamicColor: Boolean,
@@ -65,6 +68,8 @@ fun SettingsScreen(
     onThemeChange: (AppTheme) -> Unit,
     onEqualizerChange: (Boolean, Int, Int) -> Unit,
     onSkipSilenceChange: (Boolean) -> Unit,
+    onCrossfadeChange: (Boolean, Float) -> Unit,
+    onAutomixChange: (Boolean) -> Unit,
     onKeepScreenOnChange: (Boolean) -> Unit,
     onHapticsChange: (Boolean) -> Unit,
     onDynamicColorChange: (Boolean) -> Unit,
@@ -305,6 +310,36 @@ fun SettingsScreen(
             checked = hapticsEnabled,
             onCheckedChange = onHapticsChange,
         )
+        SettingsToggleRow(
+            label = stringResource(R.string.settings_crossfade),
+            checked = crossfadeEnabled,
+            onCheckedChange = { onCrossfadeChange(it, crossfadeDurationSeconds) },
+        )
+        Text(
+            text = stringResource(R.string.settings_crossfade_summary),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (crossfadeEnabled) {
+            EffectSlider(
+                label = stringResource(R.string.settings_crossfade_duration),
+                value = crossfadeDurationSeconds.toInt(),
+                enabled = true,
+                valueRange = 1f..12f,
+                valueLabel = "${crossfadeDurationSeconds.toInt()} s",
+                onValueChange = { onCrossfadeChange(true, it.toFloat()) },
+            )
+            SettingsToggleRow(
+                label = stringResource(R.string.settings_automix),
+                checked = automixEnabled,
+                onCheckedChange = onAutomixChange,
+            )
+            Text(
+                text = stringResource(R.string.settings_automix_summary),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
 
         Spacer(Modifier.height(24.dp))
         SettingsSectionTitle(stringResource(R.string.settings_backup))
@@ -619,6 +654,8 @@ private fun EffectSlider(
     value: Int,
     enabled: Boolean,
     onValueChange: (Int) -> Unit,
+    valueRange: ClosedFloatingPointRange<Float> = 0f..100f,
+    valueLabel: String = "$value%",
 ) {
     Column(modifier = Modifier.padding(vertical = 4.dp)) {
         Row(
@@ -626,12 +663,12 @@ private fun EffectSlider(
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             Text(label, style = MaterialTheme.typography.bodyMedium)
-            Text("$value%", style = MaterialTheme.typography.bodyMedium)
+            Text(valueLabel, style = MaterialTheme.typography.bodyMedium)
         }
         Slider(
             value = value.toFloat(),
             onValueChange = { onValueChange(it.toInt()) },
-            valueRange = 0f..100f,
+            valueRange = valueRange,
             enabled = enabled,
         )
     }

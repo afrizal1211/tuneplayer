@@ -157,7 +157,11 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -167,7 +171,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.media3.common.Player
 import coil3.compose.AsyncImage
 import com.tuneplayer.app.R
-import com.tuneplayer.app.data.lyrics.LrcParser
+import com.tuneplayer.app.data.lyrics.LyricsLine
 import com.tuneplayer.app.data.lyrics.LyricsSource
 import com.tuneplayer.app.data.model.AudioInfo
 import com.tuneplayer.app.data.model.LibrarySort
@@ -522,11 +526,16 @@ fun TunePlayerScreen(
                     bassBoostLevel = state.bassBoostLevel,
                     virtualizerLevel = state.virtualizerLevel,
                     skipSilence = state.skipSilence,
+                    crossfadeEnabled = state.crossfadeEnabled,
+                    crossfadeDurationSeconds = state.crossfadeDurationSeconds,
+                    automixEnabled = state.automixEnabled,
                     keepScreenOn = state.keepScreenOn,
                     hapticsEnabled = state.hapticsEnabled,
                     onThemeChange = viewModel::setTheme,
                     onEqualizerChange = viewModel::updateEqualizer,
                     onSkipSilenceChange = viewModel::setSkipSilence,
+                    onCrossfadeChange = viewModel::setCrossfade,
+                    onAutomixChange = viewModel::setAutomixEnabled,
                     onKeepScreenOnChange = viewModel::setKeepScreenOn,
                     onHapticsChange = viewModel::setHapticsEnabled,
                     dynamicColor = state.dynamicColor,
@@ -663,6 +672,7 @@ fun TunePlayerScreen(
                 isFavorite = state.currentTrack?.let { it.id in state.favoriteIds } == true,
                 syncedLyrics = state.syncedLyrics,
                 activeLyricIndex = state.activeLyricIndex,
+                activeWordIndex = state.activeWordIndex,
                 lyricsOffsetMs = state.lyricsOffsetMs,
                 lyricsSource = state.lyricsSource,
                 positionMs = state.positionMs,
@@ -3028,8 +3038,9 @@ private fun LyricsSheet(
     isShuffleEnabled: Boolean,
     repeatMode: Int,
     isFavorite: Boolean,
-    syncedLyrics: List<LrcParser.LrcLine>,
+    syncedLyrics: List<LyricsLine>,
     activeLyricIndex: Int,
+    activeWordIndex: Int,
     lyricsOffsetMs: Long,
     lyricsSource: LyricsSource?,
     positionMs: Long,
@@ -3208,6 +3219,7 @@ private fun LyricsSheet(
                 syncedLyrics.isNotEmpty() -> SyncedLyrics(
                     lines = syncedLyrics,
                     activeIndex = activeLyricIndex,
+                    activeWordIndex = activeWordIndex,
                 )
                 lyrics != null -> Text(
                     text = lyrics,
@@ -3284,8 +3296,9 @@ private fun SeekBarRow(
  */
 @Composable
 private fun SyncedLyrics(
-    lines: List<LrcParser.LrcLine>,
+    lines: List<LyricsLine>,
     activeIndex: Int,
+    activeWordIndex: Int,
 ) {
     val listState = rememberLazyListState()
     LaunchedEffect(activeIndex) {
@@ -3301,8 +3314,9 @@ private fun SyncedLyrics(
     ) {
         itemsIndexed(lines) { index, line ->
             val active = index == activeIndex
-            // Distance drives falloff: the sung line is full size, its
-            // neighbours shrink a little, everything else stays small.
+            // Word timing only exists for the active line, so the word index
+            // applies to it and nothing else.
+            val words = line.words?.takeIf { active && it.isNotEmpty() }
             val distance = abs(index - activeIndex).coerceAtMost(3)
             val scale by animateFloatAsState(
                 targetValue = when {
@@ -3328,7 +3342,7 @@ private fun SyncedLyrics(
                 label = "lyricAlpha",
             )
             Text(
-                text = line.text,
+                text = line.annotated(active && words != null, activeWordIndex),
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = if (active) FontWeight.Bold else FontWeight.Medium,
                 color = if (active) {
@@ -3349,6 +3363,33 @@ private fun SyncedLyrics(
                     .padding(vertical = 8.dp),
             )
         }
+    }
+}
+
+/**
+ * Builds the text for one lyric row, highlighting each word as it is sung.
+ *
+ * Words already sung render in the highlight colour; the word in flight and the
+ * rest stay in the base colour. Without word timing this is just the line's
+ * own text, so plain LRC renders unchanged.
+ */
+@Composable
+private fun LyricsLine.annotated(wordSynced: Boolean, activeWordIndex: Int): AnnotatedString {
+    val highlight = MaterialTheme.colorScheme.primary
+    val base = MaterialTheme.colorScheme.onSurfaceVariant
+    val words = this.words
+    if (!wordSynced || words.isNullOrEmpty()) return AnnotatedString(text)
+    return buildAnnotatedString {
+        var cursor = 0
+        words.forEachIndexed { index, word ->
+            val start = text.indexOf(word.text, cursor).takeIf { it >= 0 } ?: return@forEachIndexed
+            if (start > cursor) append(text.substring(cursor, start))
+            withStyle(SpanStyle(color = if (index <= activeWordIndex) highlight else base)) {
+                append(word.text)
+            }
+            cursor = start + word.text.length
+        }
+        if (cursor < text.length) append(text.substring(cursor))
     }
 }
 

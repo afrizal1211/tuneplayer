@@ -143,6 +143,11 @@
     <string name="library_refresh">Rescan library</string>
     <string name="settings_skip_silence">Skip silence</string>
     <string name="settings_skip_silence_summary">Jumps over silent passages in podcasts and live recordings.</string>
+    <string name="settings_crossfade">Crossfade</string>
+    <string name="settings_crossfade_summary">Blends the end of a track into the start of the next.</string>
+    <string name="settings_crossfade_duration">Blend length</string>
+    <string name="settings_automix">Automix</string>
+    <string name="settings_automix_summary">Times each blend to the beat. Falls back to a plain blend when a track\'s tempo is unknown.</string>
     <string name="audio_bitrate_value">%1$d kbps</string>
     <string name="audio_sample_rate_value">%1$s kHz</string>
     <string name="queue_badge_overflow">99+</string>
