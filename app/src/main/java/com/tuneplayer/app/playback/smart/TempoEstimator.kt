@@ -1,27 +1,27 @@
 package com.tuneplayer.app.playback.smart
 
 import android.content.Context
+import android.media.MediaCodec
+import android.media.MediaExtractor
+import android.media.MediaFormat
 import androidx.media3.common.MediaItem
-import androidx.media3.exoplayer.audio.TeeAudioProcessor
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.common.PlaybackException
-import androidx.media3.common.Player
-import androidx.media3.exoplayer.ExoPlayer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
-import java.io.ByteArrayOutputStream
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import kotlin.math.min
 
 /**
  * Estimates a track's tempo in BPM and remembers the answer.
  *
  * Tempo is estimated once per track and cached, because the decode it needs
- * is the expensive part: a few seconds of decoded PCM is enough for a tempo
+ * is the expensive part. A few seconds of decoded PCM is enough for a tempo
  * estimate, and no track's tempo changes between plays.
  *
- * Android-coupled (it decodes via ExoPlayer), so it lives outside
- * [TransitionPlanner] on purpose — the planner stays pure and testable.
+ * Android-coupled (it decodes), so it lives outside [TransitionPlanner] on
+ * purpose — the planner stays pure and testable.
  */
 @UnstableApi
 class TempoEstimator(private val context: Context) {
@@ -29,8 +29,10 @@ class TempoEstimator(private val context: Context) {
     /**
      * BPM for [mediaItem], or 0 when the track could not be decoded.
      *
-     * Reads the first [DECODE_SECONDS] seconds of audio through a tee into a
-     * buffer, then hands the buffer to the pure [TempoDetector].
+     * Reads the head of the audio through [MediaCodec] and hands the buffer to
+     * the pure [TempoDetector]. A decode that fails, times out, or produces
+     * silence answers 0, which the planner already reads as "no evidence" and
+     * answers with the plain crossfade.
      */
     suspend fun estimate(mediaItem: MediaItem, cacheKey: String): Double {
         cache[cacheKey]?.let { return it }
@@ -42,70 +44,101 @@ class TempoEstimator(private val context: Context) {
 
     private suspend fun decodeToPcm(mediaItem: MediaItem): FloatArray? =
         withContext(Dispatchers.IO) {
-            val tee = TeeAudioProcessor(TeeAudioProcessor.AudioBufferSink { buffer ->
-                val bytes = ByteArray(buffer.remaining())
-                buffer.get(bytes)
-                synchronized(pcmBuffer) { pcmBuffer.write(bytes) }
-            })
-            val player = ExoPlayer.Builder(context)
-                .setAudioProcessors(tee)
-                .build()
-            try {
-                val result = withTimeoutOrNull(DECODE_TIMEOUT_MS) {
-                    player.setMediaItem(mediaItem)
-                    player.prepare()
-                    // Decode only the head of the track, and only enough of it
-                    // for a tempo estimate.
-                    while (player.playbackState != Player.STATE_READY) {
-                        kotlinx.coroutines.delay(50)
-                    }
-                    player.playWhenReady = false
-                    val sink = ByteArrayOutputStream()
-                    val targetBytes = SAMPLE_RATE * DECODE_SECONDS * PCM_BYTES_PER_FRAME
-                    while (sink.size() < targetBytes &&
-                        player.playbackState != Player.STATE_ENDED
-                    ) {
-                        synchronized(pcmBuffer) {
-                            sink.write(pcmBuffer.toByteArray())
-                            pcmBuffer.reset()
+            val uri = mediaItem.localConfiguration?.uri ?: return@withContext null
+            withTimeoutOrNull(DECODE_TIMEOUT_MS) {
+                runCatching {
+                    val extractor = MediaExtractor()
+                    var codec: MediaCodec? = null
+                    try {
+                        extractor.setDataSource(context, uri, null)
+                        val trackIndex = (0 until extractor.trackCount).firstOrNull { index ->
+                            extractor.getTrackFormat(index)
+                                .getString(MediaFormat.KEY_MIME)
+                                ?.startsWith("audio/") == true
+                        } ?: return@runCatching null
+                        extractor.selectTrack(trackIndex)
+                        val format = extractor.getTrackFormat(trackIndex)
+                        val mime = format.getString(MediaFormat.KEY_MIME) ?: return@runCatching null
+                        val sampleRate = format.getInteger(MediaFormat.KEY_SAMPLE_RATE)
+                        val channels = format.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
+                        codec = MediaCodec.createDecoderByType(mime).also { decoder ->
+                            decoder.configure(format, null, null, 0)
+                            decoder.start()
                         }
-                        if (player.playbackState == Player.STATE_IDLE) break
-                        kotlinx.coroutines.delay(20)
+
+                        val sink = ByteArrayOutputStream()
+                        val targetBytes = SAMPLE_RATE * DECODE_SECONDS * channels * 2
+                        val info = MediaCodec.BufferInfo()
+                        var sawInputEos = false
+                        var sawOutputEos = false
+
+                        while (sink.size() < targetBytes && !sawOutputEos) {
+                            if (!sawInputEos) {
+                                val inputIndex = codec!!.dequeueInputBuffer(TIMEOUT_US)
+                                if (inputIndex >= 0) {
+                                    val buffer = codec!!.getInputBuffer(inputIndex)!!
+                                    val size = extractor.readSampleData(buffer, 0)
+                                    if (size < 0) {
+                                        codec!!.queueInputBuffer(
+                                            inputIndex, 0, 0, 0,
+                                            MediaCodec.BUFFER_FLAG_END_OF_STREAM,
+                                        )
+                                        sawInputEos = true
+                                    } else {
+                                        codec!!.queueInputBuffer(
+                                            inputIndex, 0, size, extractor.sampleTime, 0,
+                                        )
+                                        extractor.advance()
+                                    }
+                                }
+                            }
+                            val outputIndex = codec!!.dequeueOutputBuffer(info, TIMEOUT_US)
+                            if (outputIndex >= 0) {
+                                val buffer = codec!!.getOutputBuffer(outputIndex)
+                                if (buffer != null && info.size > 0) {
+                                    val chunk = ByteArray(info.size)
+                                    buffer.position(info.offset)
+                                    buffer.limit(info.offset + info.size)
+                                    buffer.get(chunk)
+                                    sink.write(chunk)
+                                }
+                                codec!!.releaseOutputBuffer(outputIndex, false)
+                                if (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) {
+                                    sawOutputEos = true
+                                }
+                            }
+                        }
+                        toMonoFloats(sink.toByteArray(), channels, sampleRate)
+                    } finally {
+                        runCatching { codec?.stop() }
+                        runCatching { codec?.release() }
+                        runCatching { extractor.release() }
                     }
-                    sink
-                } ?: return@withContext null
-                bytesToMono(result.toByteArray())
-            } catch (_: PlaybackException) {
-                null
-            } finally {
-                player.release()
+                }.getOrNull()
             }
         }
 
-    /** Interleaved stereo S16LE to mono floats, in the range -1..1. */
-    private fun bytesToMono(bytes: ByteArray): FloatArray {
-        val frames = min(bytes.size / PCM_BYTES_PER_FRAME, SAMPLE_RATE * DECODE_SECONDS)
+    /** Interleaved PCM16 to mono floats, trimmed to the decode budget. */
+    private fun toMonoFloats(bytes: ByteArray, channels: Int, sampleRate: Int): FloatArray {
+        val bytesPerFrame = channels * 2
+        val frames = min(bytes.size / bytesPerFrame, SAMPLE_RATE * DECODE_SECONDS)
         val out = FloatArray(frames)
-        var index = 0
+        val shortBuffer = ByteBuffer.wrap(bytes).order(ByteOrder.nativeOrder()).asShortBuffer()
         for (frame in 0 until frames) {
-            val base = frame * PCM_BYTES_PER_FRAME
-            val low = bytes[base].toInt() and 0xFF
-            val high = bytes[base + 1].toInt()
-            val mono = (low or (high shl 8)).toFloat() / Short.MAX_VALUE
-            out[index++] = mono
+            var sum = 0.0
+            for (channel in 0 until channels) {
+                sum += shortBuffer.get(frame * channels + channel).toDouble()
+            }
+            out[frame] = (sum / channels / Short.MAX_VALUE).toFloat()
         }
         return out
     }
 
-    private val pcmBuffer = ByteArrayOutputStream()
-
     private companion object {
         const val SAMPLE_RATE = 44_100
         const val DECODE_SECONDS = 30
-        const val DECODE_TIMEOUT_MS = 30_000L
-
-        /** Stereo, 16-bit: two bytes per frame. */
-        const val PCM_BYTES_PER_FRAME = 4
+        const val DECODE_TIMEOUT_MS = 20_000L
+        const val TIMEOUT_US = 10_000L
 
         val cache = mutableMapOf<String, Double>()
     }

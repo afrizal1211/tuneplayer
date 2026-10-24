@@ -1056,6 +1056,7 @@ private fun LyricsSource.labelRes(): Int = when (this) {
     LyricsSource.YouTube -> R.string.lyrics_source_youtube
     LyricsSource.Lrclib -> R.string.lyrics_source_lrclib
     LyricsSource.Ovh -> R.string.lyrics_source_ovh
+    LyricsSource.KuGou -> R.string.lyrics_source_kugou
 }
 
 private fun LibrarySort.labelRes(): Int = when (this) {

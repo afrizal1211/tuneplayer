@@ -49,6 +49,7 @@ import com.tuneplayer.app.data.lyrics.activeWordIndex
 import com.tuneplayer.app.data.lyrics.LyricsLookup
 import com.tuneplayer.app.data.lyrics.LyricsSource
 import com.tuneplayer.app.playback.PlaybackService
+import com.tuneplayer.app.playback.PlaybackKeys
 import com.tuneplayer.app.playback.QueueBuilder
 import com.tuneplayer.app.widget.NowPlayingWidget
 import kotlinx.coroutines.CancellationException
@@ -1811,7 +1812,7 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
             .setArtworkUri(track.artworkUri?.let(Uri::parse))
             // The playback service plans crossfade length against the incoming
             // track's real duration, and cannot read that until it prepares.
-            .setExtras(Bundle().apply { putLong(EXTRA_TRACK_DURATION_MS, track.durationMs) })
+            .setExtras(Bundle().apply { putLong(PlaybackKeys.EXTRA_TRACK_DURATION_MS, track.durationMs) })
             .build()
         return MediaItem.Builder()
             .setMediaId(track.id)

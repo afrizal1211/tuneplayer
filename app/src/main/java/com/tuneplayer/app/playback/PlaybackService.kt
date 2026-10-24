@@ -24,12 +24,26 @@ import com.tuneplayer.app.playback.smart.TransitionTrackInfo
 import com.tuneplayer.app.ui.AudioEffects
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+
+/**
+ * Keys shared between the ViewModel that builds the queue and the playback
+ * service that reads it.
+ */
+object PlaybackKeys {
+    /**
+     * MediaItem extras key carrying the track's duration in milliseconds.
+     * Crossfade planning needs the incoming track's length before the service
+     * has prepared it, and ExoPlayer only knows the length once it has.
+     */
+    const val EXTRA_TRACK_DURATION_MS = "com.tuneplayer.app.TRACK_DURATION_MS"
+}
 
 class PlaybackService : MediaSessionService() {
 
@@ -209,7 +223,7 @@ class PlaybackService : MediaSessionService() {
                         // service cannot read the real length until it has
                         // prepared the incoming track.
                         durationMs =
-                            target.mediaMetadata.extras?.getLong(EXTRA_TRACK_DURATION_MS) ?: 0L,
+                            target.mediaMetadata.extras?.getLong(PlaybackKeys.EXTRA_TRACK_DURATION_MS) ?: 0L,
                     ),
                     currentBpm = outgoingBpm,
                     nextBpm = incomingBpm,
@@ -332,7 +346,7 @@ class PlaybackService : MediaSessionService() {
         }
     }
 
-    private suspend fun awaitSecondaryReady(secondary: ExoPlayer): Boolean {
+    private suspend fun CoroutineScope.awaitSecondaryReady(secondary: ExoPlayer): Boolean {
         val deadline = SystemClock.elapsedRealtime() + CROSSFADE_READY_TIMEOUT_MS
         while (isActive && SystemClock.elapsedRealtime() < deadline) {
             when (secondary.playbackState) {
@@ -353,7 +367,7 @@ class PlaybackService : MediaSessionService() {
      * the two are aligned; the pair then fades the other way over
      * [CROSSFADE_HANDOFF_MS] and the secondary is released.
      */
-    private suspend fun finishCrossfade(secondary: ExoPlayer) {
+    private suspend fun CoroutineScope.finishCrossfade(secondary: ExoPlayer) {
         val player = player ?: return
         val targetIndex = crossfadeTargetIndex
         if (targetIndex == C.INDEX_UNSET) {
@@ -480,12 +494,6 @@ class PlaybackService : MediaSessionService() {
 
     private companion object {
         const val TAG = "Crossfade"
-
-        /**
-         * Extras key the ViewModel puts the track duration under. Crossfade
-         * planning needs the incoming track's length before it is prepared.
-         */
-        const val EXTRA_TRACK_DURATION_MS = "com.tuneplayer.app.TRACK_DURATION_MS"
 
         /** Leave a sliver of the outgoing track audible after the blend. */
         const val CROSSFADE_END_GUARD_MS = 250L

@@ -322,6 +322,6 @@ object TempoDetector {
     private fun bpmForLag(lag: Int, sampleRate: Int, hop: Int): Double =
         60.0 * sampleRate / (lag * hop)
 
-    private const val MIN_SAMPLES = 1 << 15
+    private const val MIN_SAMPLES = 32_768
     private const val MIN_CORRELATION = 0.15
 }
