@@ -696,13 +696,14 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
                     mimeType = audio.mimeType,
                     info = AudioInfo(codec = audio.codec),
                 )
-                // Do not delay playback for a metadata HEAD request. Fill in the
+                // Do not delay playback for a metadata request. Fill in the
                 // estimated bitrate if the player did not report one.
                 viewModelScope.launch {
                     val estimated = youTubeRepository.estimateBitrateKbps(
                         url = audio.url,
                         requestHeaders = audio.headers,
                         durationMs = track.durationMs,
+                        knownContentLengthBytes = audio.contentLengthBytes,
                     )
                     if (estimated != null && uiState.currentTrack?.id == track.id) {
                         val current = uiState.audioInfo
@@ -1804,7 +1805,12 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
         return info.takeIf { it != AudioInfo() }
     }
 
-    private fun buildMediaItem(track: Track, uri: String, mimeType: String?): MediaItem {
+    private fun buildMediaItem(
+        track: Track,
+        uri: String,
+        mimeType: String?,
+        requestHeaders: Map<String, String> = emptyMap(),
+    ): MediaItem {
         val metadata = MediaMetadata.Builder()
             .setTitle(track.title)
             .setArtist(track.artist)
@@ -1812,12 +1818,17 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
             .setArtworkUri(track.artworkUri?.let(Uri::parse))
             // The playback service plans crossfade length against the incoming
             // track's real duration, and cannot read that until it prepares.
-            .setExtras(Bundle().apply { putLong(PlaybackKeys.EXTRA_TRACK_DURATION_MS, track.durationMs) })
+            .setExtras(
+                Bundle().apply { putLong(PlaybackKeys.EXTRA_TRACK_DURATION_MS, track.durationMs) },
+            )
             .build()
         return MediaItem.Builder()
             .setMediaId(track.id)
             .setUri(uri)
             .setMediaMetadata(metadata)
+            // A streaming URL is signed against the headers it was minted with,
+            // so they travel with the item. Without them the player fetches the
+            // URL under its own default identity and is refused.
             .apply { mimeType?.let(::setMimeType) }
             .build()
     }

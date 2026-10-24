@@ -40,3 +40,18 @@ val STREAM_CLIENT_FALLBACK_ORDER = listOf(
 
 /** How many distinct clients a single resolve may try before giving up. */
 const val STREAM_RESOLVE_ATTEMPTS = 3
+
+/**
+ * Whether a URL must be fetched with a chunk-aligned range rather than any
+ * arbitrary one.
+ *
+ * A few clients sign URLs that only answer a `Range` whose length matches the
+ * chunk size they were minted with; a one-byte probe against such a URL is
+ * refused even though the URL is perfectly good.
+ */
+fun StreamRequiresChunkedRange(clientName: String): Boolean =
+    clientName == "ANDROID_VR" || clientName == "TVHTML5_SIMPLY"
+
+/** The range chunk size a client's URLs were signed against. */
+fun StreamRangeChunkSize(clientName: String): Long =
+    if (StreamRequiresChunkedRange(clientName)) 512L * 1024L else 1024L * 1024L

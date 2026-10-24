@@ -149,9 +149,12 @@ class PlaybackService : MediaSessionService() {
      * https:// for local files.
      */
     private fun createMediaSourceFactory(): DefaultMediaSourceFactory {
+        // A streaming URL is signed against the exact headers it was minted
+        // with, and those differ per client identity. Sending one hardcoded
+        // User-Agent for every URL gets the others refused, so the headers the
+        // resolver captured are attached per URL; only URLs with no captured
+        // headers fall back to these.
         val defaultHeaders = mapOf(
-            "User-Agent" to "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 " +
-                "(KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36",
             "Referer" to "https://music.youtube.com/",
             "Origin" to "https://music.youtube.com",
             "Accept-Language" to "en-US,en;q=0.9",
@@ -159,7 +162,9 @@ class PlaybackService : MediaSessionService() {
         val http = DefaultHttpDataSource.Factory()
             .setDefaultRequestProperties(defaultHeaders)
             .setAllowCrossProtocolRedirects(true)
-        return DefaultMediaSourceFactory(DefaultDataSource.Factory(this, http))
+        return DefaultMediaSourceFactory(
+            DefaultDataSource.Factory(this, streamHeaderDataSourceFactory(http)),
+        )
     }
 
     /**

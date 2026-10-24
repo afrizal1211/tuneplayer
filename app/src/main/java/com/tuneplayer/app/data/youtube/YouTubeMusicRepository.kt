@@ -14,6 +14,7 @@ import com.metrolist.innertubex.models.response.GetSearchSuggestionsResponse
 import com.tuneplayer.app.data.model.AudioInfo
 import com.tuneplayer.app.data.model.Track
 import com.tuneplayer.app.data.model.YouTubeAudioQuality
+import com.tuneplayer.app.playback.StreamHeaders
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.get
@@ -45,6 +46,8 @@ data class ResolvedAudio(
     val mimeType: String?,
     val headers: Map<String, String>,
     val codec: String? = null,
+    /** Total size the extractor reported, so no HEAD request is needed. */
+    val contentLengthBytes: Long? = null,
 )
 
 data class YouTubeSearchSuggestions(
@@ -529,21 +532,37 @@ class YouTubeMusicRepository {
                 null
             } ?: continue
 
+            // The URL is signed against the client identity that minted it, so
+            // its own headers are used exactly as given. Rewriting the
+            // User-Agent here — even to a newer one — breaks the signature and
+            // the URL answers 403.
             val requestHeaders = stream.headers
-                .plus("User-Agent" to WEB_USER_AGENT)
-                .plus("Referer" to "https://music.youtube.com/")
-                .plus("Origin" to "https://music.youtube.com")
 
             // Nothing is handed to the player, or cached, until bytes have
             // been fetched from the URL.
-            if (probeStream(stream.audioUrl, requestHeaders) != StreamProbe.OK) continue
+            val probe = probeStream(
+                url = stream.audioUrl,
+                requestHeaders = requestHeaders,
+                rangeBytes = if (stream.useRangeChunks) {
+                    stream.rangeChunkSizeBytes
+                } else {
+                    1L
+                },
+            )
+            // An unreachable URL may still be good — the device was offline, or
+            // the request timed out. Refusal is the server's own answer.
+            if (probe == StreamProbe.REFUSED) continue
 
             RESOLVED_HEADERS[stream.audioUrl] = requestHeaders
+            // The player and the tempo decoder fetch this URL again later, so
+            // the headers it was signed against have to be reachable then too.
+            StreamHeaders.put(stream.audioUrl, requestHeaders)
             return ResolvedAudio(
                 url = stream.audioUrl,
                 mimeType = stream.mimeType,
                 headers = requestHeaders,
                 codec = AudioInfo.codecLabel(stream.mimeType),
+                contentLengthBytes = stream.contentLengthBytes,
             )
         }
 
@@ -559,13 +578,16 @@ class YouTubeMusicRepository {
     private suspend fun probeStream(
         url: String,
         requestHeaders: Map<String, String>,
+        rangeBytes: Long,
     ): StreamProbe {
         val status = withTimeoutOrNull(PROBE_TIMEOUT_MS) {
             runCatching {
                 httpClient.get(url) {
                     requestHeaders.forEach { (key, value) -> header(key, value) }
-                    header("User-Agent", WEB_USER_AGENT)
-                    header("Range", "bytes=0-1023")
+                    // Ask for one byte, not a page. A full GET of a 4 MB stream
+                    // to answer "is this alive" is a waste of the user's data.
+                    // Chunked clients refuse a range that is not their own size.
+                    header("Range", "bytes=0-${(rangeBytes - 1).coerceAtLeast(0L)}")
                 }.status
             }.getOrNull()
         } ?: return StreamProbe.UNREACHABLE
@@ -587,13 +609,16 @@ class YouTubeMusicRepository {
         url: String,
         requestHeaders: Map<String, String>,
         durationMs: Long,
+        knownContentLengthBytes: Long? = null,
     ): Int? = withContext(Dispatchers.IO) {
         if (durationMs <= 0L) return@withContext null
-        val lengthBytes = withTimeoutOrNull(3_000) {
+        // A HEAD is a second chance to be refused by a URL that already played
+        // fine, so the size the extractor already knows is preferred.
+        val lengthBytes = knownContentLengthBytes?.takeIf { it > 0L } ?: withTimeoutOrNull(3_000) {
             runCatching {
                 httpClient.head(url) {
-                    requestHeaders.forEach { (key, value) -> header(key, value) }
-                    header("User-Agent", WEB_USER_AGENT)
+                    (requestHeaders.ifEmpty { StreamHeaders.forUri(url).orEmpty() })
+                        .forEach { (key, value) -> header(key, value) }
                 }.headers[HttpHeaders.ContentLength]?.toLongOrNull()
             }.getOrNull()
         } ?: return@withContext null
