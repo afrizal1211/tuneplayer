@@ -400,3 +400,28 @@ internal fun LibrarySort.labelRes(): Int = when (this) {
     LibrarySort.Album -> R.string.sort_by_album
     LibrarySort.Duration -> R.string.sort_by_duration
 }
+
+/** Small play/shuffle pair used above list screens that have no toolbar. */
+@Composable
+internal fun BulkActionRow(
+    onPlayAll: () -> Unit,
+    onShuffleAll: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        AssistChip(
+            onClick = onShuffleAll,
+            label = { Text(stringResource(R.string.action_shuffle_all)) },
+            leadingIcon = { Icon(Icons.Default.Shuffle, contentDescription = null) },
+        )
+        AssistChip(
+            onClick = onPlayAll,
+            label = { Text(stringResource(R.string.action_play_all)) },
+            leadingIcon = { Icon(Icons.Default.PlayArrow, contentDescription = null) },
+        )
+    }
+}
