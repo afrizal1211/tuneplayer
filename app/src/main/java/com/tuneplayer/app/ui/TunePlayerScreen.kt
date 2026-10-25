@@ -45,6 +45,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -55,6 +56,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -126,7 +128,24 @@ fun TunePlayerScreen(
         }
     }
 
-    var selectedTab by rememberSaveable { mutableIntStateOf(initialTab) }
+    // Tab back stack. Tapping a tab pushes it; back pops to the previous tab
+    // and only exits the activity at the root. Compose Crossfade recreates
+    // each screen on switch, so this also restores which tab you came from.
+    val backStack = rememberSaveable(
+        saver = androidx.compose.runtime.saveable.listSaver<List<Int>>(
+            save = { it },
+            restore = { it.toMutableList() },
+        ),
+    ) { mutableStateOf(listOf(initialTab)) }
+    val selectedTab = backStack.last()
+    val selectTab: (Int) -> Unit = { tab ->
+        if (tab != selectedTab) {
+            backStack.value = backStack.value + tab
+        }
+    }
+    androidx.activity.compose.BackHandler(enabled = backStack.value.size > 1) {
+        backStack.value = backStack.value.dropLast(1)
+    }
     LaunchedEffect(selectedTab) {
         if (selectedTab == 1) viewModel.loadHomeRecommendations()
     }
@@ -160,7 +179,9 @@ fun TunePlayerScreen(
         LocalDownloadTrack provides viewModel::downloadTrack,
         LocalRemoveDownload provides viewModel::removeDownload,
     ) {
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     Scaffold(
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
             TopAppBar(
                 title = {
@@ -220,6 +241,7 @@ fun TunePlayerScreen(
                         }
                     }
                 },
+                scrollBehavior = scrollBehavior,
             )
         },
         bottomBar = {
@@ -238,19 +260,19 @@ fun TunePlayerScreen(
                 NavigationBar {
                     NavigationBarItem(
                         selected = selectedTab == 0,
-                        onClick = { selectedTab = 0 },
+                        onClick = { selectTab(0) },
                         icon = { Icon(Icons.Default.LibraryMusic, contentDescription = null) },
                         label = { Text(stringResource(R.string.tab_library)) },
                     )
                     NavigationBarItem(
                         selected = selectedTab == 1,
-                        onClick = { selectedTab = 1 },
+                        onClick = { selectTab(1) },
                         icon = { Icon(Icons.Default.Search, contentDescription = null) },
                         label = { Text(stringResource(R.string.tab_youtube)) },
                     )
                     NavigationBarItem(
                         selected = selectedTab == 2,
-                        onClick = { selectedTab = 2 },
+                        onClick = { selectTab(2) },
                         icon = {
                             val queueCount = state.playbackQueue.size
                             BadgedBox(
@@ -275,7 +297,7 @@ fun TunePlayerScreen(
                     )
                     NavigationBarItem(
                         selected = selectedTab == 3,
-                        onClick = { selectedTab = 3 },
+                        onClick = { selectTab(3) },
                         icon = { Icon(Icons.Default.Favorite, contentDescription = null) },
                         label = { Text(stringResource(R.string.tab_liked)) },
                     )
@@ -507,35 +529,35 @@ fun TunePlayerScreen(
                     icon = Icons.Default.History,
                     label = stringResource(R.string.tab_history),
                 ) {
-                    selectedTab = 4
+                    selectTab(4)
                     showMore = false
                 }
                 MoreSheetItem(
                     icon = Icons.Default.PlaylistPlay,
                     label = stringResource(R.string.tab_playlists),
                 ) {
-                    selectedTab = 5
+                    selectTab(5)
                     showMore = false
                 }
                 MoreSheetItem(
                     icon = Icons.Default.Download,
                     label = stringResource(R.string.tab_downloads),
                 ) {
-                    selectedTab = 8
+                    selectTab(8)
                     showMore = false
                 }
                 MoreSheetItem(
                     icon = Icons.Default.BarChart,
                     label = stringResource(R.string.tab_stats),
                 ) {
-                    selectedTab = 7
+                    selectTab(7)
                     showMore = false
                 }
                 MoreSheetItem(
                     icon = Icons.Default.Settings,
                     label = stringResource(R.string.tab_settings),
                 ) {
-                    selectedTab = 6
+                    selectTab(6)
                     showMore = false
                 }
             }
@@ -567,7 +589,7 @@ fun TunePlayerScreen(
                 },
                 onOpenQueue = {
                     showPlayer = false
-                    selectedTab = 2
+                    selectTab(2)
                 },
                 onDismiss = { showPlayer = false },
             )

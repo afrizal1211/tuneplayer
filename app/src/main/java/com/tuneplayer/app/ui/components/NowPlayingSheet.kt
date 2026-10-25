@@ -13,14 +13,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Favorite
@@ -168,7 +168,7 @@ internal fun NowPlayingSheet(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
+                    .fillMaxHeight()
                     .padding(horizontal = 24.dp)
                     .padding(bottom = 32.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -185,16 +185,23 @@ internal fun NowPlayingSheet(
                         )
                     }
                 }
-                Artwork(
-                    track = track,
-                    size = 264,
-                    cornerRadius = 24,
-                    shadowElevation = 16,
-                    modifier = Modifier.graphicsLayer {
-                        scaleX = artScale
-                        scaleY = artScale
-                    },
-                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f, fill = false),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Artwork(
+                        track = track,
+                        size = 264,
+                        cornerRadius = 24,
+                        shadowElevation = 16,
+                        modifier = Modifier.graphicsLayer {
+                            scaleX = artScale
+                            scaleY = artScale
+                        },
+                    )
+                }
                 Spacer(Modifier.height(24.dp))
                 Text(
                     text = track.title,
