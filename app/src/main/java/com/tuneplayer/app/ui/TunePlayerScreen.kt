@@ -132,22 +132,18 @@ fun TunePlayerScreen(
     // Tab back stack. Tapping a tab pushes it; back pops to the previous tab
     // and only exits the activity at the root. Compose Crossfade recreates
     // each screen on switch, so this also restores which tab you came from.
-    var backStack by rememberSaveable(
-        saver = androidx.compose.runtime.saveable.Saver(
-            save = { list: List<Int> -> list.joinToString(",") },
-            restore = { s: String ->
-                if (s.isEmpty()) listOf(initialTab) else s.split(",").map { it.toInt() }
-            },
-        ),
-    ) { listOf(initialTab) }
+    // Stored as a comma-joined string because rememberSaveable's listSaver
+    // infers Saveable from the element type and would not resolve for Int.
+    var backStackCsv by rememberSaveable { mutableStateOf(initialTab.toString()) }
+    val backStack = backStackCsv.split(",").map { it.toInt() }
     val selectedTab = backStack.last()
     val selectTab: (Int) -> Unit = { tab ->
         if (tab != selectedTab) {
-            backStack = backStack + tab
+            backStackCsv = (backStack + tab).joinToString(",")
         }
     }
     BackHandler(enabled = backStack.size > 1) {
-        backStack = backStack.dropLast(1)
+        backStackCsv = backStack.dropLast(1).joinToString(",")
     }
     LaunchedEffect(selectedTab) {
         if (selectedTab == 1) viewModel.loadHomeRecommendations()
