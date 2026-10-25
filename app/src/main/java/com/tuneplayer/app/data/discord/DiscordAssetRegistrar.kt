@@ -56,7 +56,10 @@ object DiscordAssetRegistrar {
         cache[imageUrl]?.let { return@withContext "mp:$it" }
 
         val registered = registerExternal(applicationId, accessToken, imageUrl)
-            ?: return@withContext null
+        // A registration failure is not a reason to drop the artwork: Discord
+        // accepts a plain https URL for large_image on a gateway activity, so
+        // the raw URL is the fallback and the card keeps its sleeve.
+        if (registered == null) return@withContext imageUrl
         cache[imageUrl] = registered
         "mp:$registered"
     }

@@ -652,11 +652,28 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
      * [playResolved] would then fall back to a single-item player. Only an
      * empty or single-track queue is seeded from the library, starting at the
      * tapped song and wrapping around, so playback has somewhere to go.
+     *
+     * A tap is a request to play that song now, not to enqueue it, so a track
+     * already in the queue is moved up rather than inserted a second time.
+     * Without that, tapping library rows grows the queue by one per tap with
+     * no ceiling — the queue fills with duplicates of what is already there.
      */
     private fun autoQueueSeed(track: Track): List<Track> {
         val queue = uiState.playbackQueue
         if (queue.size > 1) {
-            if (queue.any { it.id == track.id }) return queue
+            val existing = queue.indexOfFirst { it.id == track.id }
+            if (existing >= 0) {
+                // Already queued: drop it from where it sits and re-insert just
+                // after the current item, so it plays next without duplicating.
+                val withoutTrack = queue.filterIndexed { i, _ -> i != existing }
+                val playingId = queue.getOrNull(uiState.queueIndex)?.id
+                val currentIndex = playingId
+                    ?.let { id -> withoutTrack.indexOfFirst { it.id == id } }
+                    ?.takeIf { it >= 0 }
+                    ?: uiState.queueIndex.coerceIn(0, withoutTrack.lastIndex)
+                val insertAt = (currentIndex + 1).coerceAtMost(withoutTrack.size)
+                return withoutTrack.toMutableList().apply { add(insertAt, track) }
+            }
             val insertAt = (uiState.queueIndex + 1).coerceAtMost(queue.size)
             return queue.toMutableList().apply { add(insertAt, track) }
         }
@@ -1029,7 +1046,13 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
         if (wasEmpty) {
             playFromQueue(newQueue, 0)
         } else {
-            pushQueueToPlayer(newQueue, uiState.queueIndex)
+            // Appending must not disturb what is playing: setMediaItems resets
+            // the playhead, so the new item is added to the player's own list.
+            val uri = playbackUri(track)
+            if (uri != null) {
+                controller?.addMediaItem(buildMediaItem(track, uri, null))
+            }
+            persistQueue()
         }
     }
 
@@ -1517,11 +1540,10 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
         val duration = uiState.durationMs
         val position = uiState.positionMs.coerceAtLeast(0L)
 
-        // Artwork needs a registered application id and a successful
-        // external-asset call. Both are optional: when either is missing the
-        // card still shows title, artist and timestamps, just without the
-        // image. Discord drops `assets` outright when `application_id` is
-        // absent, so an app id is never guessed.
+        // Artwork needs a registered application id. Discord drops `assets`
+        // outright when `application_id` is absent, so an app id is never
+        // guessed; without one the card still shows title, artist and
+        // timestamps, just without the sleeve.
         val applicationId = app.settingsStore.discordApplicationId
         val token = app.settingsStore.discordToken
         val artworkUrl = track.artworkUri?.toString()?.takeIf {
@@ -1532,6 +1554,12 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
         } else {
             null
         }
+        // Both text fields link to the track on YouTube Music, which is what
+        // makes the card clickable. Local tracks have no video id, so they
+        // stay plain text rather than linking somewhere wrong.
+        val trackUrl = track.videoId
+            ?.takeIf { it.isNotBlank() && !track.isLocal }
+            ?.let { "https://music.youtube.com/watch?v=$it" }
 
         return JSONObject().apply {
             put("name", appName)
@@ -1547,6 +1575,9 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
                     put("large_image", largeImage)
                     put("large_text", title)
                 })
+            }
+            if (trackUrl != null) {
+                put("details_url", trackUrl)
             }
             if (!isPaused) {
                 put("timestamps", JSONObject().apply {

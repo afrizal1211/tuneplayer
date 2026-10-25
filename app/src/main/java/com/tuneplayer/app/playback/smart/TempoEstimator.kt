@@ -48,13 +48,13 @@ class TempoEstimator(private val context: Context) {
      */
     suspend fun estimate(mediaItem: MediaItem, cacheKey: String): Double {
         cache[cacheKey]?.let { return it }
-        val samples = decodeToPcm(mediaItem) ?: return 0.0
-        val bpm = TempoDetector.estimateBpm(samples, SAMPLE_RATE)
+        val (samples, rate) = decodeToPcm(mediaItem) ?: return 0.0
+        val bpm = TempoDetector.estimateBpm(samples, rate)
         if (bpm > 0) cache[cacheKey] = bpm
         return bpm
     }
 
-    private suspend fun decodeToPcm(mediaItem: MediaItem): FloatArray? =
+    private suspend fun decodeToPcm(mediaItem: MediaItem): Pair<FloatArray, Int>? =
         withContext(Dispatchers.IO) {
             val uri = mediaItem.localConfiguration?.uri ?: return@withContext null
             // The URL was signed against the headers captured at resolve time;
@@ -102,8 +102,8 @@ class TempoEstimator(private val context: Context) {
             target.length() > 0L
         }.getOrDefault(false)
 
-    /** Decodes [file] to mono PCM16, or null when it carries no audio track. */
-    private fun decodeFile(file: File): FloatArray? = runCatching {
+    /** Decodes [file] to mono PCM16 with the sample rate it was encoded at. */
+    private fun decodeFile(file: File): Pair<FloatArray, Int>? = runCatching {
         val extractor = MediaExtractor()
         var codec: MediaCodec? = null
         try {
@@ -117,6 +117,16 @@ class TempoEstimator(private val context: Context) {
             val format = extractor.getTrackFormat(trackIndex)
             val mime = format.getString(MediaFormat.KEY_MIME) ?: return null
             val channels = format.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
+            // The decoder outputs at the encoder's own sample rate, which for
+            // YouTube streams is 48 kHz rather than the 44.1 kHz assumed here
+            // before. Reading the actual rate matters: a fixed 44.100 against a
+            // real 48.000 skews every lag by ~8.8%, which is enough to put the
+            // beat grid a quarter beat out and make the blend drift audibly.
+            val sampleRate = if (format.containsKey(MediaFormat.KEY_SAMPLE_RATE)) {
+                format.getInteger(MediaFormat.KEY_SAMPLE_RATE)
+            } else {
+                SAMPLE_RATE
+            }
             codec = MediaCodec.createDecoderByType(mime).also { decoder ->
                 decoder.configure(format, null, null, 0)
                 decoder.start()
@@ -163,7 +173,7 @@ class TempoEstimator(private val context: Context) {
                     }
                 }
             }
-            toMonoFloats(sink.toByteArray(), channels, SAMPLE_RATE)
+            toMonoFloats(sink.toByteArray(), channels, sampleRate) to sampleRate
         } finally {
             runCatching { codec?.stop() }
             runCatching { codec?.release() }

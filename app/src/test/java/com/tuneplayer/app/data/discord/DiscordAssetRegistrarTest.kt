@@ -41,6 +41,8 @@ class DiscordAssetRegistrarTest {
 
     @Test
     fun `remote artwork url is not discord hosted`() {
+        // Not Discord-hosted, so it needs registering. parseDiscordCdn only
+        // reports the pass-through case; resolveImage handles the fallback.
         assertNull(
             DiscordAssetRegistrar.parseDiscordCdn(
                 "https://i.ytimg.com/vi/abc/hqdefault.jpg",
