@@ -26,8 +26,8 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import com.tuneplayer.app.data.lyrics.LyricsLine
 import kotlin.math.abs
-import com.tuneplayer.app.ui.components.SyncedLyrics
 
+@Composable
 internal fun SyncedLyrics(
     lines: List<LyricsLine>,
     activeIndex: Int,
@@ -99,13 +99,6 @@ internal fun SyncedLyrics(
     }
 }
 
-/**
- * Builds the text for one lyric row, highlighting each word as it is sung.
- *
- * Words already sung render in the highlight colour; the word in flight and the
- * rest stay in the base colour. Without word timing this is just the line's
- * own text, so plain LRC renders unchanged.
- */
 @Composable
 internal fun LyricsLine.annotated(wordSynced: Boolean, activeWordIndex: Int): AnnotatedString {
     val highlight = MaterialTheme.colorScheme.primary
@@ -125,12 +118,3 @@ internal fun LyricsLine.annotated(wordSynced: Boolean, activeWordIndex: Int): An
         if (cursor < text.length) append(text.substring(cursor))
     }
 }
-
-/**
- * Recently played. Track ids come from [com.tuneplayer.app.data.prefs.FavoriteStore]
- * history and are resolved against whatever library metadata is loaded.
- *
- * Ids that no longer resolve (deleted file, stale YouTube entry) are dropped
- * rather than shown as broken rows.
- */
-@Composable

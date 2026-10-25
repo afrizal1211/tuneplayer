@@ -4,12 +4,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.staticCompositionLocalOf
 import com.tuneplayer.app.data.model.Track
-import com.tuneplayer.app.ui.util.DownloadUiState
-import com.tuneplayer.app.ui.util.LocalDownloadTrack
-import com.tuneplayer.app.ui.util.LocalDownloadUiState
-import com.tuneplayer.app.ui.util.LocalHapticsEnabled
-import com.tuneplayer.app.ui.util.LocalNowPlayingId
-import com.tuneplayer.app.ui.util.LocalRemoveDownload
+
+package com.tuneplayer.app.ui.util
+
+import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.staticCompositionLocalOf
+import com.tuneplayer.app.data.model.Track
 
 /** Honors the haptics switch without threading a boolean through every row. */
 internal val LocalHapticsEnabled = staticCompositionLocalOf { true }

@@ -52,8 +52,6 @@ import androidx.compose.ui.unit.dp
 import com.tuneplayer.app.R
 import com.tuneplayer.app.data.model.Track
 import com.tuneplayer.app.ui.fadingEdge
-import com.tuneplayer.app.ui.components.Artwork
-import com.tuneplayer.app.ui.components.TrackList
 import com.tuneplayer.app.ui.util.LocalDownloadTrack
 import com.tuneplayer.app.ui.util.LocalDownloadUiState
 import com.tuneplayer.app.ui.util.LocalHapticsEnabled
@@ -61,6 +59,7 @@ import com.tuneplayer.app.ui.util.LocalNowPlayingId
 import com.tuneplayer.app.ui.util.LocalRemoveDownload
 import com.tuneplayer.app.ui.util.formatDuration
 
+@Composable
 internal fun TrackList(
     tracks: List<Track>,
     favoriteIds: Set<String>,
@@ -106,7 +105,6 @@ internal fun TrackList(
     }
 }
 
-/** Grid cell: artwork, title, artist. */
 @Composable
 internal fun GridTrackCell(
     track: Track,
@@ -330,7 +328,6 @@ internal fun TrackRow(
     )
 }
 
-/** Compact download affordance for cards where a full row menu is too much. */
 @Composable
 internal fun DownloadIconButton(track: Track, modifier: Modifier = Modifier) {
     if (track.isLocal) return

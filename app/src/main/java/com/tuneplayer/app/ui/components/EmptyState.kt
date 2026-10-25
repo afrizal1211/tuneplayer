@@ -20,8 +20,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.tuneplayer.app.ui.components.EmptyState
 
+@Composable
 internal fun EmptyState(
     icon: ImageVector,
     title: String,
@@ -75,5 +75,3 @@ internal fun EmptyState(
         }
     }
 }
-
-@Composable

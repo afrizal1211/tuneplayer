@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -44,10 +45,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.tuneplayer.app.R
 import com.tuneplayer.app.data.model.Track
-import com.tuneplayer.app.ui.components.Artwork
-import com.tuneplayer.app.ui.components.MiniPlayer
 import com.tuneplayer.app.ui.util.LocalHapticsEnabled
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
 internal fun MiniPlayer(
     track: Track,
     isPlaying: Boolean,
@@ -199,4 +200,3 @@ internal fun MiniPlayer(
         }
     }
 }
-

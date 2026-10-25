@@ -43,7 +43,6 @@ import com.tuneplayer.app.R
 import com.tuneplayer.app.data.model.Track
 import com.tuneplayer.app.ui.components.EmptyState
 import com.tuneplayer.app.ui.components.TrackList
-import com.tuneplayer.app.ui.screens.DownloadsScreen
 
 @Composable
 internal fun DownloadsScreen(
@@ -191,5 +190,3 @@ internal fun DownloadsScreen(
         )
     }
 }
-
-@Composable

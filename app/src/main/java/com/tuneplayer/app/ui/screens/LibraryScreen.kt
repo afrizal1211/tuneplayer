@@ -51,11 +51,11 @@ import com.tuneplayer.app.R
 import com.tuneplayer.app.data.lyrics.LyricsSource
 import com.tuneplayer.app.data.model.LibrarySort
 import com.tuneplayer.app.data.model.Track
-import com.tuneplayer.app.ui.fadingEdge
 import com.tuneplayer.app.ui.components.EmptyState
 import com.tuneplayer.app.ui.components.TrackList
-import com.tuneplayer.app.ui.screens.LibraryScreen
+import com.tuneplayer.app.ui.fadingEdge
 
+@Composable
 internal fun LibraryScreen(
     tracks: List<Track>,
     favoriteIds: Set<String>,
@@ -215,7 +215,7 @@ internal fun LibraryScreen(
     }
 }
 
-private enum class LibraryGrouping { Songs, Albums, Artists }
+internal enum class LibraryGrouping { Songs, Albums, Artists }
 
 internal fun LibraryGrouping.labelRes(): Int = when (this) {
     LibraryGrouping.Songs -> R.string.library_group_songs
@@ -229,12 +229,6 @@ internal fun Track.groupKey(grouping: LibraryGrouping, unknown: String): String 
     LibraryGrouping.Songs -> id
 }
 
-/**
- * Albums/artists view: one header per group, tracks beneath.
- *
- * Groups are sorted by name rather than by the library sort so the section
- * order stays stable while the tracks inside each section keep that sort.
- */
 @Composable
 internal fun GroupedTrackList(
     tracks: List<Track>,
@@ -408,5 +402,3 @@ internal fun LibrarySort.labelRes(): Int = when (this) {
     LibrarySort.Album -> R.string.sort_by_album
     LibrarySort.Duration -> R.string.sort_by_duration
 }
-
-@Composable

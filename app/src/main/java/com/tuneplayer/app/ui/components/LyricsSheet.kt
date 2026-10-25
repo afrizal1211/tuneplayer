@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.RepeatOne
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -43,11 +44,9 @@ import com.tuneplayer.app.R
 import com.tuneplayer.app.data.lyrics.LyricsLine
 import com.tuneplayer.app.data.lyrics.LyricsSource
 import com.tuneplayer.app.data.model.Track
-import com.tuneplayer.app.ui.components.Artwork
-import com.tuneplayer.app.ui.components.LyricsSheet
-import com.tuneplayer.app.ui.components.SeekBarRow
-import com.tuneplayer.app.ui.components.SyncedLyrics
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
 internal fun LyricsSheet(
     track: Track?,
     lyrics: String?,
@@ -258,11 +257,3 @@ internal fun LyricsSheet(
         }
     }
 }
-
-/**
- * Seek bar with elapsed / total labels.
- *
- * While dragging, [Slider] owns the value so the thumb does not jump back
- * under the 250 ms position poll.
- */
-@Composable

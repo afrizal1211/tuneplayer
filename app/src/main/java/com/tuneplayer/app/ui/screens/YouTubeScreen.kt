@@ -6,6 +6,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -57,13 +58,14 @@ import androidx.compose.ui.unit.dp
 import com.tuneplayer.app.R
 import com.tuneplayer.app.data.model.Track
 import com.tuneplayer.app.data.youtube.YouTubeSearchFilter
-import com.tuneplayer.app.ui.fadingEdge
 import com.tuneplayer.app.ui.components.Artwork
 import com.tuneplayer.app.ui.components.EmptyState
 import com.tuneplayer.app.ui.components.TrackList
-import com.tuneplayer.app.ui.screens.YouTubeScreen
+import com.tuneplayer.app.ui.fadingEdge
 import com.tuneplayer.app.ui.util.formatDuration
 
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
 internal fun YouTubeScreen(
     query: String,
     results: List<Track>,
@@ -612,5 +614,3 @@ internal fun SearchSuggestionList(
         }
     }
 }
-
-@Composable

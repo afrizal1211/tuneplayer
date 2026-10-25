@@ -36,11 +36,11 @@ import androidx.compose.ui.unit.dp
 import com.tuneplayer.app.R
 import com.tuneplayer.app.data.model.Track
 import com.tuneplayer.app.data.prefs.PlaylistStore
-import com.tuneplayer.app.ui.fadingEdge
 import com.tuneplayer.app.ui.components.EmptyState
 import com.tuneplayer.app.ui.components.TrackList
-import com.tuneplayer.app.ui.screens.PlaylistsScreen
+import com.tuneplayer.app.ui.fadingEdge
 
+@Composable
 internal fun PlaylistsScreen(
     playlists: List<PlaylistStore.Playlist>,
     tracksFor: (PlaylistStore.Playlist) -> List<Track>,
@@ -238,9 +238,3 @@ internal fun PlaylistNameDialog(
         },
     )
 }
-
-/**
- * Shared empty state: a tonal icon bubble, a short title, and optional hint
- * and action. Keeps empty screens feeling intentional instead of unfinished.
- */
-@Composable

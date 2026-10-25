@@ -1,10 +1,8 @@
 package com.tuneplayer.app.ui.util
 
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
 import com.tuneplayer.app.R
 import com.tuneplayer.app.data.model.Track
-import com.tuneplayer.app.ui.util.shareTrack
 
 internal fun shareTrack(context: android.content.Context, track: Track) {
     val body = if (track.isLocal) {
@@ -22,6 +20,3 @@ internal fun shareTrack(context: android.content.Context, track: Track) {
             .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
     )
 }
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable

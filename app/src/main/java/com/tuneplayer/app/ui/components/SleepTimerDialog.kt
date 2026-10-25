@@ -18,7 +18,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.tuneplayer.app.R
-import com.tuneplayer.app.ui.components.SleepTimerDialog
 import com.tuneplayer.app.ui.util.SLEEP_MINUTE_OPTIONS
 
 @Composable
@@ -105,4 +104,3 @@ internal fun SleepTimerDialog(
         },
     )
 }
-

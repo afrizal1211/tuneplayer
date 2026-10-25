@@ -49,12 +49,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.tuneplayer.app.R
 import com.tuneplayer.app.data.model.Track
-import com.tuneplayer.app.ui.fadingEdge
 import com.tuneplayer.app.ui.components.Artwork
 import com.tuneplayer.app.ui.components.EmptyState
-import com.tuneplayer.app.ui.screens.QueueScreen
+import com.tuneplayer.app.ui.fadingEdge
 import com.tuneplayer.app.ui.util.formatDuration
 
+@Composable
 internal fun QueueScreen(
     queue: List<Track>,
     currentIndex: Int,
@@ -279,5 +279,3 @@ internal fun QueueRow(
     }
     }
 }
-
-/** Opens the system share sheet with a search link for the track. */

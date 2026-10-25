@@ -1,5 +1,6 @@
 package com.tuneplayer.app.ui.components
 
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
@@ -22,6 +23,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.QueueMusic
@@ -32,6 +35,7 @@ import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.Subtitles
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -64,12 +68,10 @@ import com.tuneplayer.app.R
 import com.tuneplayer.app.data.model.AudioInfo
 import com.tuneplayer.app.data.model.Track
 import com.tuneplayer.app.ui.theme.ArtworkGradient
-import com.tuneplayer.app.ui.components.Artwork
-import com.tuneplayer.app.ui.components.NowPlayingSheet
-import com.tuneplayer.app.ui.components.SeekBarRow
-import com.tuneplayer.app.ui.components.TrackList
 import com.tuneplayer.app.ui.util.LocalHapticsEnabled
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
 internal fun NowPlayingSheet(
     track: Track,
     audioInfo: AudioInfo?,
@@ -416,5 +418,40 @@ internal fun NowPlayingSheet(
     }
 }
 
-/** Favorite icon with spring scale + crossfade between filled/outline. */
 @Composable
+internal fun AnimatedIcon(isFavorite: Boolean, modifier: Modifier = Modifier) {
+    var animatedIsFavorite by remember { mutableStateOf(isFavorite) }
+    val animatedScale by animateFloatAsState(
+        targetValue = if (animatedIsFavorite) 1f else 0f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessLow,
+        ),
+        label = "favoriteScale",
+    )
+    LaunchedEffect(isFavorite) { animatedIsFavorite = isFavorite }
+    Box(
+        modifier = modifier
+            .size(24.dp)
+            .graphicsLayer {
+                scaleX = animatedScale
+                scaleY = animatedScale
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Crossfade(targetState = animatedIsFavorite, animationSpec = tween(150)) { state ->
+            when (state) {
+                true -> Icon(
+                    imageVector = Icons.Default.Favorite,
+                    contentDescription = stringResource(R.string.action_unfavorite),
+                    tint = MaterialTheme.colorScheme.error,
+                )
+                false -> Icon(
+                    imageVector = Icons.Default.FavoriteBorder,
+                    contentDescription = stringResource(R.string.action_favorite_add),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}

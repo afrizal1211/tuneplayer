@@ -12,9 +12,9 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import com.tuneplayer.app.ui.components.SeekBarRow
 import com.tuneplayer.app.ui.util.formatDuration
 
+@Composable
 internal fun SeekBarRow(
     positionMs: Long,
     durationMs: Long,
@@ -54,11 +54,3 @@ internal fun SeekBarRow(
         }
     }
 }
-
-/**
- * Highlights the line for the current playback position and keeps it in view.
- *
- * The active line grows and lights up with a spring while its neighbours fade
- * back, which reads as the line being sung rather than merely highlighted.
- */
-@Composable
