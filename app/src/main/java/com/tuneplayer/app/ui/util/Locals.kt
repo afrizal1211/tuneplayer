@@ -1,12 +1,5 @@
 package com.tuneplayer.app.ui.util
 
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.compositionLocalOf
-import androidx.compose.runtime.staticCompositionLocalOf
-import com.tuneplayer.app.data.model.Track
-
-package com.tuneplayer.app.ui.util
-
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.staticCompositionLocalOf
 import com.tuneplayer.app.data.model.Track

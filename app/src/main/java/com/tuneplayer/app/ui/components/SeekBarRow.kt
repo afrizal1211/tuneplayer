@@ -13,6 +13,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import com.tuneplayer.app.ui.util.formatDuration
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 
 @Composable
 internal fun SeekBarRow(

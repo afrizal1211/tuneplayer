@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import com.tuneplayer.app.R
 import com.tuneplayer.app.data.model.Track
 import com.tuneplayer.app.ui.util.LocalHapticsEnabled
+import androidx.compose.runtime.getValue
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

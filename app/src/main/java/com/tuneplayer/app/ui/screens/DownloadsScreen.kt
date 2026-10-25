@@ -43,6 +43,8 @@ import com.tuneplayer.app.R
 import com.tuneplayer.app.data.model.Track
 import com.tuneplayer.app.ui.components.EmptyState
 import com.tuneplayer.app.ui.components.TrackList
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 
 @Composable
 internal fun DownloadsScreen(

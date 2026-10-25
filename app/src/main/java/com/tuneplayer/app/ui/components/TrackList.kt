@@ -58,6 +58,8 @@ import com.tuneplayer.app.ui.util.LocalHapticsEnabled
 import com.tuneplayer.app.ui.util.LocalNowPlayingId
 import com.tuneplayer.app.ui.util.LocalRemoveDownload
 import com.tuneplayer.app.ui.util.formatDuration
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 
 @Composable
 internal fun TrackList(

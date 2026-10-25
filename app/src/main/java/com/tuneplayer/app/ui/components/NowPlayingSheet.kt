@@ -69,6 +69,8 @@ import com.tuneplayer.app.data.model.AudioInfo
 import com.tuneplayer.app.data.model.Track
 import com.tuneplayer.app.ui.theme.ArtworkGradient
 import com.tuneplayer.app.ui.util.LocalHapticsEnabled
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

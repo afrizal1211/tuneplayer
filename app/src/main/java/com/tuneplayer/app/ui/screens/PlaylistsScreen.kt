@@ -39,6 +39,8 @@ import com.tuneplayer.app.data.prefs.PlaylistStore
 import com.tuneplayer.app.ui.components.EmptyState
 import com.tuneplayer.app.ui.components.TrackList
 import com.tuneplayer.app.ui.fadingEdge
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 
 @Composable
 internal fun PlaylistsScreen(

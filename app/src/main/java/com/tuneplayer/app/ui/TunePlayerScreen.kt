@@ -88,6 +88,11 @@ import com.tuneplayer.app.ui.util.shareTrack
 import com.tuneplayer.app.ui.util.formatDuration
 import kotlin.math.abs
 import kotlinx.coroutines.launch
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.provides
+import androidx.compose.runtime.setValue
+import com.tuneplayer.app.ui.util.PLAYBACK_SPEEDS
+import com.tuneplayer.app.ui.util.formatSpeed
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

@@ -26,6 +26,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import com.tuneplayer.app.data.lyrics.LyricsLine
 import kotlin.math.abs
+import androidx.compose.runtime.getValue
 
 @Composable
 internal fun SyncedLyrics(

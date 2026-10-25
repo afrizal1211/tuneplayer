@@ -53,6 +53,8 @@ import com.tuneplayer.app.ui.components.Artwork
 import com.tuneplayer.app.ui.components.EmptyState
 import com.tuneplayer.app.ui.fadingEdge
 import com.tuneplayer.app.ui.util.formatDuration
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 
 @Composable
 internal fun QueueScreen(

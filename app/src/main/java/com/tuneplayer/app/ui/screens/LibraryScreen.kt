@@ -54,6 +54,8 @@ import com.tuneplayer.app.data.model.Track
 import com.tuneplayer.app.ui.components.EmptyState
 import com.tuneplayer.app.ui.components.TrackList
 import com.tuneplayer.app.ui.fadingEdge
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 
 @Composable
 internal fun LibraryScreen(
@@ -389,12 +391,6 @@ internal fun LibraryFilterBar(
     }
 }
 
-internal fun LyricsSource.labelRes(): Int = when (this) {
-    LyricsSource.YouTube -> R.string.lyrics_source_youtube
-    LyricsSource.Lrclib -> R.string.lyrics_source_lrclib
-    LyricsSource.Ovh -> R.string.lyrics_source_ovh
-    LyricsSource.KuGou -> R.string.lyrics_source_kugou
-}
 
 internal fun LibrarySort.labelRes(): Int = when (this) {
     LibrarySort.Title -> R.string.sort_by_title
