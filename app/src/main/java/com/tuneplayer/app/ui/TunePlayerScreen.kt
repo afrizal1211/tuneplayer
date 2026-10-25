@@ -565,8 +565,11 @@ fun TunePlayerScreen(
                     discordShowWhenPaused = state.discordShowWhenPaused,
                     onDiscordRpcChange = viewModel::setDiscordRpcEnabled,
                     onDiscordShowWhenPausedChange = viewModel::setDiscordShowWhenPaused,
-                    onDiscordTokenSave = viewModel::saveDiscordToken,
-                    onDiscordTokenRemove = viewModel::removeDiscordToken,
+                     onDiscordTokenSave = viewModel::saveDiscordToken,
+                     onDiscordTokenRemove = viewModel::removeDiscordToken,
+                     discordApplicationId = state.discordApplicationId,
+                     onDiscordApplicationIdSave = viewModel::saveDiscordApplicationId,
+                     onDiscordApplicationIdRemove = viewModel::removeDiscordApplicationId,
                 )
 
                 7 -> StatsScreen(
@@ -2490,7 +2493,9 @@ private fun QueueScreen(
             modifier = Modifier.fillMaxSize().fadingEdge(bottom = 12.dp),
             contentPadding = PaddingValues(bottom = 12.dp),
         ) {
-            itemsIndexed(items = queue, key = { _, track -> track.id }) { index, track ->
+            // Keyed by position, not id: the radio seed allows the same track
+            // twice (per-artist cap of 2), and Compose throws on a repeated key.
+            itemsIndexed(items = queue, key = { index, _ -> index }) { index, track ->
                 QueueRow(
                     track = track,
                     isPlaying = index == currentIndex,
@@ -3589,7 +3594,7 @@ private fun PlaylistsScreen(
                     LazyColumn(
             modifier = Modifier.heightIn(max = 360.dp).fadingEdge(top = 8.dp, bottom = 8.dp),
         ) {
-                        itemsIndexed(items = tracks, key = { _, t -> t.id }) { index, track ->
+                        itemsIndexed(items = tracks, key = { index, _ -> index }) { index, track ->
                             TrackRow(
                                 track = track,
                                 isFavorite = track.id in favoriteIds,

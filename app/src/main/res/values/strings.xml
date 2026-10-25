@@ -225,5 +225,13 @@
     <string name="discord_token_summary">Paste a token from your own Discord account. It is stored only on this device and left out of backups.</string>
     <string name="discord_token_hint">Token</string>
     <string name="discord_state_paused">Paused · %1$s</string>
+    <string name="settings_discord_artwork">Presence artwork</string>
+    <string name="settings_discord_artwork_summary">Discord only shows artwork when it is registered against an application you own. Create one at discord.com/developers/applications, then paste its Application ID here. Without it the card still shows the track, just without the image.</string>
+    <string name="settings_discord_set_application_id">Set app ID</string>
+    <string name="settings_discord_update_application_id">Change</string>
+    <string name="settings_discord_remove_application_id">Remove</string>
+    <string name="discord_application_id_title">Discord application ID</string>
+    <string name="discord_application_id_summary">The Application ID from your own Discord developer application. It owns the artwork that appears on your presence card.</string>
+    <string name="discord_application_id_hint">Application ID</string>
     <string name="lyrics_refresh">Refresh lyrics</string>
 </resources>

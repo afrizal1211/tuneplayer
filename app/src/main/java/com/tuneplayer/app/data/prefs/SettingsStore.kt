@@ -198,6 +198,22 @@ class SettingsStore(context: Context) {
             prefs.edit().putString(KEY_DISCORD_TOKEN, value?.takeIf { it.isNotBlank() }).apply()
         }
 
+    /**
+     * Discord application id that owns the presence artwork.
+     *
+     * Artwork cannot be published without one: Discord silently drops the
+     * `assets` object from an activity that carries no `application_id`, so the
+     * card renders text-only no matter what URL is supplied. The user creates
+     * the application at discord.com/developers and pastes its id here, because
+     * an app id this project does not own would break the moment its owner
+     * revokes it.
+     */
+    var discordApplicationId: String?
+        get() = prefs.getString(KEY_DISCORD_APP_ID, null)?.takeIf { it.isNotBlank() }
+        set(value) {
+            prefs.edit().putString(KEY_DISCORD_APP_ID, value?.filter(Char::isDigit)?.takeIf { it.isNotBlank() }).apply()
+        }
+
     fun clearDiscordToken() {
         prefs.edit().remove(KEY_DISCORD_TOKEN).putBoolean(KEY_DISCORD_ENABLED, false).apply()
     }
@@ -266,6 +282,7 @@ class SettingsStore(context: Context) {
         const val KEY_DISCORD_ENABLED = "discord_rpc_enabled"
         const val KEY_DISCORD_TOKEN = "discord_token"
         const val KEY_DISCORD_SHOW_WHEN_PAUSED = "discord_show_when_paused"
+        const val KEY_DISCORD_APP_ID = "discord_application_id"
         const val SEP = "\u001F"
         const val SEARCH_HISTORY_LIMIT = 20
     }

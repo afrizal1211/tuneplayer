@@ -33,6 +33,7 @@ import com.tuneplayer.app.data.model.applySort
 import com.tuneplayer.app.data.model.matchesQuery
 import com.tuneplayer.app.data.youtube.YouTubeSearchFilter
 import com.tuneplayer.app.data.discord.ActiveHoldState
+import com.tuneplayer.app.data.discord.DiscordAssetRegistrar
 import com.tuneplayer.app.data.discord.DiscordHoldContext
 import com.tuneplayer.app.data.discord.DiscordPresenceDecision
 import com.tuneplayer.app.data.discord.DiscordPresenceInputs
@@ -136,6 +137,7 @@ data class TunePlayerUiState(
     val discordTokenSaved: Boolean = false,
     val discordConnected: Boolean = false,
     val discordShowWhenPaused: Boolean = false,
+    val discordApplicationId: String? = null,
 )
 
 class TunePlayerViewModel(application: Application) : AndroidViewModel(application) {
@@ -231,7 +233,11 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
             app.discordRpcClient.connected.collect { connected ->
                 val wasConnected = uiState.discordConnected
                 uiState = uiState.copy(discordConnected = connected)
-                if (connected && !wasConnected) updateDiscordPresence()
+                if (connected && !wasConnected) {
+                    // Registration is a network call, so it must not block the
+                    // flow collector; a second coroutine keeps the collect hot.
+                    viewModelScope.launch { updateDiscordPresence() }
+                }
             }
         }
         controllerFuture.addListener(
@@ -364,7 +370,7 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
         player.seekTo(target)
         LogCatcher.d(TAG, "seekTo ${target}ms")
         uiState = uiState.copy(positionMs = target)
-        updateDiscordPresence()
+        viewModelScope.launch { updateDiscordPresence() }
     }
 
     /**
@@ -1036,19 +1042,41 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
         val newIndex = playingId
             ?.let { id -> newQueue.indexOfFirst { it.id == id } }
             ?.takeIf { it >= 0 }
-            ?: uiState.queueIndex.coerceAtMost(newQueue.lastIndex).coerceAtLeast(0)
+            ?: uiState.queueIndex.coerceIn(0, newQueue.lastIndex)
         uiState = uiState.copy(
             playbackQueue = newQueue,
             queueIndex = newIndex,
         )
         if (newQueue.isEmpty()) {
             clearQueue()
-        } else {
-            pushQueueToPlayer(newQueue, newIndex)
-            if (removingCurrent) {
-                playFromQueue(newQueue, newIndex)
-            }
+            return
         }
+        if (removingCurrent) {
+            playFromQueue(newQueue, newIndex)
+        } else {
+            // Only the queue display changed: the player keeps its own list and
+            // its playhead. setMediaItems resets playback to the start of an
+            // item, so the removal is applied to the player's list in place.
+            removePlayerItemForQueueIndex(index)
+            persistQueue()
+        }
+    }
+
+    /**
+     * Drops the player item that backs [queueIndex], leaving playback running.
+     *
+     * The player list can be shorter than the queue because remote tracks
+     * without a cached URI are skipped, so the item is found by media id rather
+     * than by offset.
+     */
+    private fun removePlayerItemForQueueIndex(queueIndex: Int) {
+        val player = controller ?: return
+        val track = uiState.playbackQueue.getOrNull(queueIndex) ?: return
+        val playerIndex = (0 until player.mediaItemCount)
+            .firstOrNull { player.getMediaItemAt(it).mediaId == track.id }
+            ?: return
+        if (playerIndex == player.currentMediaItemIndex) return
+        player.removeMediaItem(playerIndex)
     }
 
     fun clearQueue() {
@@ -1102,7 +1130,6 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
             queueIndexes += index
         }
         if (items.isEmpty()) return
-        playerIndexToQueueIndex = queueIndexes
         val playerStart = queueIndexes.indexOfFirst { it >= startIndex }
             .takeIf { it >= 0 } ?: 0
         player.setMediaItems(items, playerStart, 0L)
@@ -1170,8 +1197,6 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     /** Player item index -> uiState queue index; empty when no queue is loaded. */
-    private var playerIndexToQueueIndex: List<Int> = emptyList()
-
     fun playNext() {
         val nextIndex = uiState.queueIndex + 1
         if (nextIndex in uiState.playbackQueue.indices) {
@@ -1272,6 +1297,7 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
             youtubeAudioQuality = settings.youtubeAudioQuality,
             lyricsOffsetMs = settings.lyricsOffsetMs,
             discordRpcEnabled = settings.discordRpcEnabled,
+        discordApplicationId = settings.discordApplicationId,
             discordTokenSaved = settings.discordToken != null,
         )
         app.syncDiscordRpc()
@@ -1352,14 +1378,14 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
         app.settingsStore.discordRpcEnabled = enabled
         uiState = uiState.copy(discordRpcEnabled = enabled)
         app.syncDiscordRpc()
-        updateDiscordPresence()
+        viewModelScope.launch { updateDiscordPresence() }
     }
 
     /** Keep or drop the card while paused, independent of the enable toggle. */
     fun setDiscordShowWhenPaused(show: Boolean) {
         app.settingsStore.discordShowWhenPaused = show
         uiState = uiState.copy(discordShowWhenPaused = show)
-        updateDiscordPresence()
+        viewModelScope.launch { updateDiscordPresence() }
     }
 
     /** Saving a token also opts in, matching the single dialog that collects it. */
@@ -1370,7 +1396,7 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
         app.settingsStore.discordRpcEnabled = true
         uiState = uiState.copy(discordRpcEnabled = true, discordTokenSaved = true)
         app.syncDiscordRpc()
-        updateDiscordPresence()
+        viewModelScope.launch { updateDiscordPresence() }
     }
 
     fun removeDiscordToken() {
@@ -1384,13 +1410,36 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     /**
+     * Stores the application id that owns the presence artwork.
+     *
+     * Cached registrations are dropped because the asset namespace is per
+     * application: an asset registered under the old id is meaningless to the
+     * new one.
+     */
+    fun saveDiscordApplicationId(applicationId: String) {
+        val digits = applicationId.filter(Char::isDigit)
+        if (digits.isBlank()) return
+        app.settingsStore.discordApplicationId = digits
+        DiscordAssetRegistrar.invalidate()
+        uiState = uiState.copy(discordApplicationId = digits)
+        viewModelScope.launch { updateDiscordPresence() }
+    }
+
+    fun removeDiscordApplicationId() {
+        app.settingsStore.discordApplicationId = null
+        DiscordAssetRegistrar.invalidate()
+        uiState = uiState.copy(discordApplicationId = null)
+        viewModelScope.launch { updateDiscordPresence() }
+    }
+
+    /**
      * Applies the playback snapshot to the Discord card.
      *
      * The decision comes from [DiscordPresencePolicy]; buffering holds the last
      * visible card rather than flickering the presence off and back on, and a
      * stalled stream falls back to a cleared card.
      */
-    private fun updateDiscordPresence() {
+    private suspend fun updateDiscordPresence() {
         val settings = app.settingsStore
         if (!settings.discordRpcEnabled || settings.discordToken == null) {
             discordHold = null
@@ -1453,7 +1502,7 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
-    private fun buildDiscordActivity(track: Track, isPaused: Boolean): JSONObject {
+    private suspend fun buildDiscordActivity(track: Track, isPaused: Boolean): JSONObject {
         val appName = app.getString(R.string.app_name).take(MAX_DISCORD_TEXT)
         val title = track.title.trim().ifBlank { appName }.take(MAX_DISCORD_TEXT)
         val artist = track.artist.trim()
@@ -1467,12 +1516,38 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
         val now = System.currentTimeMillis()
         val duration = uiState.durationMs
         val position = uiState.positionMs.coerceAtLeast(0L)
+
+        // Artwork needs a registered application id and a successful
+        // external-asset call. Both are optional: when either is missing the
+        // card still shows title, artist and timestamps, just without the
+        // image. Discord drops `assets` outright when `application_id` is
+        // absent, so an app id is never guessed.
+        val applicationId = settings.discordApplicationId
+        val token = settings.discordToken
+        val artworkUrl = track.artworkUri?.toString()?.takeIf {
+            it.startsWith("http://") || it.startsWith("https://")
+        }
+        val largeImage = if (applicationId != null && token != null && artworkUrl != null) {
+            DiscordAssetRegistrar.resolveImage(applicationId, token, artworkUrl)
+        } else {
+            null
+        }
+
         return JSONObject().apply {
             put("name", appName)
             put("type", 2) // Listening
             put("details", title)
             put("state", stateText)
             put("status_display_type", 2) // Prefer the track title in compact surfaces.
+            if (applicationId != null) {
+                put("application_id", applicationId)
+            }
+            if (largeImage != null) {
+                put("assets", JSONObject().apply {
+                    put("large_image", largeImage)
+                    put("large_text", title)
+                })
+            }
             if (!isPaused) {
                 put("timestamps", JSONObject().apply {
                     put("start", now - position)
@@ -1675,7 +1750,7 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
     private fun publishWidgetState() {
         val track = uiState.currentTrack
         NowPlayingWidget.publish(app, track?.title, track?.artist, uiState.isPlaying)
-        updateDiscordPresence()
+        viewModelScope.launch { updateDiscordPresence() }
     }
 
     /**
@@ -1724,9 +1799,12 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
         val newIndex = playingId
             ?.let { id -> newQueue.indexOfFirst { it.id == id } }
             ?.takeIf { it >= 0 }
-            ?: 0
+            ?: uiState.queueIndex.coerceIn(0, newQueue.lastIndex)
         uiState = uiState.copy(playbackQueue = newQueue, queueIndex = newIndex)
-        pushQueueToPlayer(newQueue, newIndex)
+        // Reordering must not disturb the playhead. setMediaItems restarts the
+        // current item, so only the persistence layer is updated here; the
+        // player's own order is left for the next full queue load.
+        persistQueue()
     }
 
     private companion object {

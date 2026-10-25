@@ -36,6 +36,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.tuneplayer.app.R
@@ -88,11 +90,16 @@ fun SettingsScreen(
     onDiscordShowWhenPausedChange: (Boolean) -> Unit,
     onDiscordTokenSave: (String) -> Unit,
     onDiscordTokenRemove: () -> Unit,
+    discordApplicationId: String?,
+    onDiscordApplicationIdSave: (String) -> Unit,
+    onDiscordApplicationIdRemove: () -> Unit,
 ) {
     var showLogs by remember { mutableStateOf(false) }
     var showYouTubeLogin by remember { mutableStateOf(false) }
     var showDiscordToken by remember { mutableStateOf(false) }
     var discordTokenInput by remember { mutableStateOf("") }
+    var showDiscordAppId by remember { mutableStateOf(false) }
+    var discordAppIdInput by remember { mutableStateOf("") }
     var backupStatus by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
     val exportLauncher = rememberLauncherForActivityResult(
@@ -288,6 +295,40 @@ fun SettingsScreen(
             )
             Text(
                 text = stringResource(R.string.settings_discord_show_when_paused_summary),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = stringResource(R.string.settings_discord_artwork),
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.weight(1f),
+                )
+                if (discordApplicationId.isNullOrBlank()) {
+                    TextButton(onClick = { showDiscordAppId = true }) {
+                        Text(stringResource(R.string.settings_discord_set_application_id))
+                    }
+                } else {
+                    Text(
+                        text = discordApplicationId.orEmpty(),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    TextButton(onClick = { showDiscordAppId = true }) {
+                        Text(stringResource(R.string.settings_discord_update_application_id))
+                    }
+                    TextButton(onClick = onDiscordApplicationIdRemove) {
+                        Text(stringResource(R.string.settings_discord_remove_application_id))
+                    }
+                }
+            }
+            Text(
+                text = stringResource(R.string.settings_discord_artwork_summary),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -529,6 +570,61 @@ fun SettingsScreen(
                     onClick = {
                         showDiscordToken = false
                         discordTokenInput = ""
+                    },
+                ) {
+                    Text(stringResource(R.string.action_cancel))
+                }
+            },
+        )
+    }
+
+    if (showDiscordAppId) {
+        AlertDialog(
+            onDismissRequest = {
+                showDiscordAppId = false
+                discordAppIdInput = ""
+            },
+            title = { Text(stringResource(R.string.discord_application_id_title)) },
+            text = {
+                Column {
+                    Text(
+                        text = stringResource(R.string.discord_application_id_summary),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = discordAppIdInput,
+                        onValueChange = { input ->
+                            // Only digits are meaningful, so drop everything else
+                            // at the source rather than failing on save.
+                            discordAppIdInput = input.filter { it.isDigit() }
+                        },
+                        label = { Text(stringResource(R.string.discord_application_id_hint)) },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = discordAppIdInput.isNotBlank(),
+                    onClick = {
+                        val appId = discordAppIdInput
+                        discordAppIdInput = ""
+                        showDiscordAppId = false
+                        onDiscordApplicationIdSave(appId)
+                    },
+                ) {
+                    Text(stringResource(R.string.action_save))
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showDiscordAppId = false
+                        discordAppIdInput = ""
                     },
                 ) {
                     Text(stringResource(R.string.action_cancel))
