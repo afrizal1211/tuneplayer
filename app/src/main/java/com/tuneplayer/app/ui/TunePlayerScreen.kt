@@ -133,11 +133,10 @@ fun TunePlayerScreen(
     // and only exits the activity at the root. Compose Crossfade recreates
     // each screen on switch, so this also restores which tab you came from.
     var backStack by rememberSaveable(
-        saver = androidx.compose.runtime.saveable.Saver<List<Int>, String>(
-            save = { it.joinToString(",") },
-            restore = { s ->
-                if (s.isEmpty()) listOf(initialTab)
-                else s.split(",").map { it.toInt() }
+        saver = androidx.compose.runtime.saveable.Saver(
+            save = { list: List<Int> -> list.joinToString(",") },
+            restore = { s: String ->
+                if (s.isEmpty()) listOf(initialTab) else s.split(",").map { it.toInt() }
             },
         ),
     ) { listOf(initialTab) }
