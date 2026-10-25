@@ -1522,8 +1522,8 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
         // card still shows title, artist and timestamps, just without the
         // image. Discord drops `assets` outright when `application_id` is
         // absent, so an app id is never guessed.
-        val applicationId = settings.discordApplicationId
-        val token = settings.discordToken
+        val applicationId = app.settingsStore.discordApplicationId
+        val token = app.settingsStore.discordToken
         val artworkUrl = track.artworkUri?.toString()?.takeIf {
             it.startsWith("http://") || it.startsWith("https://")
         }
