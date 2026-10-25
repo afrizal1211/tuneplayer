@@ -3,6 +3,7 @@ package com.tuneplayer.app.ui
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.Crossfade
@@ -53,6 +54,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -131,20 +133,20 @@ fun TunePlayerScreen(
     // Tab back stack. Tapping a tab pushes it; back pops to the previous tab
     // and only exits the activity at the root. Compose Crossfade recreates
     // each screen on switch, so this also restores which tab you came from.
-    val backStack = rememberSaveable(
-        saver = androidx.compose.runtime.saveable.listSaver<List<Int>>(
-            save = { it },
-            restore = { it.toMutableList() },
-        ),
-    ) { mutableStateOf(listOf(initialTab)) }
-    val selectedTab = backStack.last()
+    val backStack = rememberSaveable(saver = listSaver(
+        save = { it.toList() },
+        restore = { it },
+    )) { listOf(initialTab) }
+    var selectedTab by remember { mutableIntStateOf(backStack.last()) }
     val selectTab: (Int) -> Unit = { tab ->
         if (tab != selectedTab) {
             backStack.value = backStack.value + tab
+            selectedTab = tab
         }
     }
-    androidx.activity.compose.BackHandler(enabled = backStack.value.size > 1) {
+    BackHandler(enabled = backStack.value.size > 1) {
         backStack.value = backStack.value.dropLast(1)
+        selectedTab = backStack.value.last()
     }
     LaunchedEffect(selectedTab) {
         if (selectedTab == 1) viewModel.loadHomeRecommendations()
