@@ -985,12 +985,13 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
     fun setCrossfade(enabled: Boolean, durationSeconds: Float) {
         app.settingsStore.crossfadeEnabled = enabled
         app.settingsStore.crossfadeDurationSeconds = durationSeconds
+        uiState = uiState.copy(crossfadeEnabled = enabled, crossfadeDurationSeconds = durationSeconds)
     }
 
     fun setAutomixEnabled(enabled: Boolean) {
         app.settingsStore.automixEnabled = enabled
-        uiState = uiState.copy(automixEnabled = enabled)
         uiState = uiState.copy(
+            automixEnabled = enabled,
             crossfadeEnabled = enabled,
             crossfadeDurationSeconds = app.settingsStore.crossfadeDurationSeconds,
         )
