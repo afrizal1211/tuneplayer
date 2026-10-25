@@ -71,6 +71,7 @@ import com.tuneplayer.app.ui.theme.ArtworkGradient
 import com.tuneplayer.app.ui.util.LocalHapticsEnabled
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
+import com.tuneplayer.app.ui.components.DownloadIconButton
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

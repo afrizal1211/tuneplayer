@@ -44,6 +44,7 @@ import com.tuneplayer.app.R
 import com.tuneplayer.app.data.lyrics.LyricsLine
 import com.tuneplayer.app.data.lyrics.LyricsSource
 import com.tuneplayer.app.data.model.Track
+import com.tuneplayer.app.ui.util.labelRes
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
