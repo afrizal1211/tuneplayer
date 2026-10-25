@@ -70,7 +70,7 @@ object DiscordAssetRegistrar {
      * Strips a cdn.discordapp.com URL down to its `mp:`-prefixed path, or null
      * when [imageUrl] is not Discord-hosted.
      */
-    private fun parseDiscordCdn(imageUrl: String): String? {
+    internal fun parseDiscordCdn(imageUrl: String): String? {
         val prefixes = listOf(
             "https://cdn.discordapp.com/",
             "http://cdn.discordapp.com/",
