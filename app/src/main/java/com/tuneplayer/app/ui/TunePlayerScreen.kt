@@ -39,6 +39,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.lazy.LazyColumn
+import com.tuneplayer.app.ui.fadingEdge
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -78,6 +79,7 @@ import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.QueueMusic
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.Close
@@ -119,7 +121,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -916,7 +921,7 @@ private fun GroupedTrackList(
     }
 
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier.fillMaxSize().fadingEdge(bottom = 12.dp),
         contentPadding = PaddingValues(bottom = 12.dp),
     ) {
         groups.forEach { (name, groupTracks) ->
@@ -1380,6 +1385,7 @@ private fun SearchFilterRow(
         modifier = Modifier
             .fillMaxWidth()
             .horizontalScroll(rememberScrollState())
+            .fadingEdge(left = 16.dp, right = 16.dp)
             .padding(horizontal = 16.dp, vertical = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
@@ -1688,7 +1694,7 @@ private fun TrackList(
     if (grid) {
         LazyVerticalGrid(
             columns = GridCells.Fixed(2),
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize().fadingEdge(bottom = 12.dp),
             contentPadding = PaddingValues(12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -1704,7 +1710,7 @@ private fun TrackList(
         return
     }
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier.fillMaxSize().fadingEdge(top = 12.dp, bottom = 12.dp),
         contentPadding = PaddingValues(bottom = 12.dp),
     ) {
         items(items = tracks, key = { it.id }) { track ->
@@ -2481,7 +2487,7 @@ private fun QueueScreen(
             }
         }
         LazyColumn(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize().fadingEdge(bottom = 12.dp),
             contentPadding = PaddingValues(bottom = 12.dp),
         ) {
             itemsIndexed(items = queue, key = { _, track -> track.id }) { index, track ->
@@ -2536,6 +2542,38 @@ private fun QueueRow(
     onMoveDown: () -> Unit,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
+    var dismissed by remember { mutableStateOf(false) }
+    val dismissState = rememberSwipeToDismissBoxState()
+    LaunchedEffect(dismissState.currentValue) {
+        if (dismissState.currentValue != SwipeToDismissBoxValue.Settled && !dismissed) {
+            dismissed = true
+            onRemove()
+        }
+    }
+    SwipeToDismissBox(
+        state = dismissState,
+        backgroundContent = {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.errorContainer)
+                    .padding(horizontal = 24.dp),
+                contentAlignment = if (dismissState.dismissDirection == SwipeToDismissBoxValue.StartToEnd) {
+                    Alignment.CenterStart
+                } else {
+                    Alignment.CenterEnd
+                },
+            ) {
+                Icon(
+                    imageVector = Icons.Default.DeleteOutline,
+                    contentDescription = stringResource(R.string.action_remove),
+                    tint = MaterialTheme.colorScheme.onErrorContainer,
+                )
+            }
+        },
+        enableDismissFromStartToEnd = true,
+        enableDismissFromEndToStart = true,
+    ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -2621,6 +2659,7 @@ private fun QueueRow(
                 )
             }
         }
+    }
     }
 }
 
@@ -3485,7 +3524,7 @@ private fun PlaylistsScreen(
             return@Column
         }
 
-        LazyColumn(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(modifier = Modifier.fillMaxSize().fadingEdge(bottom = 12.dp)) {
             items(items = playlists, key = { it.id }) { playlist ->
                 val count = tracksFor(playlist).size
                 ListItem(
@@ -3547,7 +3586,9 @@ private fun PlaylistsScreen(
                 if (tracks.isEmpty()) {
                     Text(stringResource(R.string.playlist_empty))
                 } else {
-                    LazyColumn(modifier = Modifier.heightIn(max = 360.dp)) {
+                    LazyColumn(
+            modifier = Modifier.heightIn(max = 360.dp).fadingEdge(top = 8.dp, bottom = 8.dp),
+        ) {
                         itemsIndexed(items = tracks, key = { _, t -> t.id }) { index, track ->
                             TrackRow(
                                 track = track,
