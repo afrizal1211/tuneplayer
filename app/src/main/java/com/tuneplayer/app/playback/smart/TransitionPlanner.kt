@@ -7,9 +7,6 @@ import kotlin.math.round
 import kotlin.math.roundToInt
 import kotlin.math.roundToLong
 
-/** Which crossfade behaviour the listener asked for. */
-enum class CrossfadeMode { STANDARD, SMART }
-
 /** The minimal facts about a queue item the planner needs, independent of Media3. */
 data class TransitionTrackInfo(
     val id: String,
