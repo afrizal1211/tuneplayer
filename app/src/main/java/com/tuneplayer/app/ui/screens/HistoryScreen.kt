@@ -3,6 +3,7 @@ package com.tuneplayer.app.ui.screens
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.History
 import androidx.compose.runtime.Composable
@@ -23,6 +24,7 @@ internal fun HistoryScreen(
     onShare: (Track) -> Unit,
     onPlayAll: () -> Unit,
     onShuffleAll: () -> Unit,
+    listState: LazyListState? = null,
 ) {
     if (tracks.isEmpty()) {
         EmptyState(
@@ -42,6 +44,7 @@ internal fun HistoryScreen(
                 onPlayNext = onPlayNext,
                 onToggleFavorite = onToggleFavorite,
                 onShare = onShare,
+                listState = listState,
             )
         }
     }

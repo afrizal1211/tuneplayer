@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
@@ -64,6 +65,7 @@ internal fun QueueScreen(
     onRemove: (Int) -> Unit,
     onMove: (Int, Int) -> Unit,
     onClear: () -> Unit,
+    listState: LazyListState? = null,
 ) {
     var confirmClear by remember { mutableStateOf(false) }
 
@@ -104,6 +106,7 @@ internal fun QueueScreen(
             }
         }
         LazyColumn(
+            state = listState,
             modifier = Modifier.fillMaxSize().fadingEdge(bottom = 12.dp),
             contentPadding = PaddingValues(bottom = 12.dp),
         ) {

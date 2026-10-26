@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.QueueMusic
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Timer
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.DropdownMenu
@@ -344,6 +345,14 @@ fun TunePlayerScreen(
                 }
             }
 
+            // Scroll state lives above the Crossfade so switching tabs and
+            // back lands you where you left off instead of at the top.
+            val libraryListState = rememberLazyListState()
+            val queueListState = rememberLazyListState()
+            val historyListState = rememberLazyListState()
+            val playlistsListState = rememberLazyListState()
+            val downloadsListState = rememberLazyListState()
+
             Crossfade(
                 targetState = selectedTab,
                 animationSpec = tween(180),
@@ -368,6 +377,7 @@ fun TunePlayerScreen(
                     onRefresh = viewModel::loadLocalMusic,
                     onShuffleAll = viewModel::shuffleAll,
                     onPlayAll = viewModel::playAll,
+                    listState = libraryListState,
                     onPlay = viewModel::play,
                     onPlayNext = viewModel::playNext,
                     onToggleFavorite = viewModel::toggleFavorite,
@@ -405,6 +415,7 @@ fun TunePlayerScreen(
                     onRemove = viewModel::removeFromQueue,
                     onMove = viewModel::moveInQueue,
                     onClear = viewModel::clearQueue,
+                    listState = queueListState,
                 )
 
                 3 -> {
@@ -432,6 +443,7 @@ fun TunePlayerScreen(
                     onShare = { track -> shareTrack(context, track) },
                     onPlayAll = { viewModel.playTracks(state.historyTracks) },
                     onShuffleAll = { viewModel.shuffleTracks(state.historyTracks) },
+                    listState = historyListState,
                 )
 
                 5 -> PlaylistsScreen(
@@ -447,6 +459,7 @@ fun TunePlayerScreen(
                     onPlayNext = viewModel::playNext,
                     onToggleFavorite = viewModel::toggleFavorite,
                     onShare = { track -> shareTrack(context, track) },
+                    listState = playlistsListState,
                 )
 
                 6 -> SettingsScreen(
@@ -518,6 +531,7 @@ fun TunePlayerScreen(
                     onPlayAll = { viewModel.playTracks(state.downloadedTracks) },
                     onShuffleAll = { viewModel.shuffleTracks(state.downloadedTracks) },
                     onClearAll = viewModel::clearDownloads,
+                    listState = downloadsListState,
                 )
                 }
             }

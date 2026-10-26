@@ -84,7 +84,6 @@ data class TunePlayerUiState(
     val isLoadingLocal: Boolean = false,
     val isSearching: Boolean = false,
     val isPlaying: Boolean = false,
-    val playerReady: Boolean = false,
     val error: String? = null,
     val sleepDurationMillis: Long = 0,
     val isSleepTimerActive: Boolean = false,
@@ -147,7 +146,7 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
     private val youTubeRepository = app.youTubeMusicRepository
     private val lrclibLyricsRepository = app.lrclibLyricsRepository
     private val ovhLyricsRepository = app.ovhLyricsRepository
-    private val kuGouLyricsRepository = KuGouLyricsRepository()
+    private val kuGouLyricsRepository = app.kuGouLyricsRepository
     private var searchJob: Job? = null
     private var searchSuggestionsJob: Job? = null
     private val favoriteStore = app.favoriteStore
@@ -268,7 +267,6 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
                             }
                         })
                         uiState = uiState.copy(
-                            playerReady = true,
                             isPlaying = connectedController.isPlaying,
                             isShuffleEnabled = connectedController.shuffleModeEnabled,
                             repeatMode = connectedController.repeatMode,

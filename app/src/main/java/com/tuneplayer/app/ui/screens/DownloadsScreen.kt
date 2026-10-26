@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
@@ -59,6 +60,7 @@ internal fun DownloadsScreen(
     onPlayAll: () -> Unit,
     onShuffleAll: () -> Unit,
     onClearAll: () -> Unit,
+    listState: LazyListState? = null,
 ) {
     var confirmClear by remember { mutableStateOf(false) }
     if (tracks.isEmpty()) {
@@ -150,6 +152,7 @@ internal fun DownloadsScreen(
         }
         Spacer(Modifier.height(8.dp))
         LazyColumn(
+            state = listState,
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(bottom = 24.dp),
         ) {

@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items as gridItems
@@ -70,6 +71,7 @@ internal fun TrackList(
     onToggleFavorite: (Track) -> Unit,
     onShare: (Track) -> Unit,
     grid: Boolean = false,
+    listState: LazyListState? = null,
 ) {
     if (grid) {
         LazyVerticalGrid(
@@ -90,6 +92,7 @@ internal fun TrackList(
         return
     }
     LazyColumn(
+        state = listState,
         modifier = Modifier.fillMaxSize().fadingEdge(top = 12.dp, bottom = 12.dp),
         contentPadding = PaddingValues(bottom = 12.dp),
     ) {

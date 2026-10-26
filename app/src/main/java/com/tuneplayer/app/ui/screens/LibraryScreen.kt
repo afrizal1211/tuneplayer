@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
@@ -81,6 +82,7 @@ internal fun LibraryScreen(
     onPlayNext: (Track) -> Unit,
     onToggleFavorite: (Track) -> Unit,
     onShare: (Track) -> Unit,
+    listState: LazyListState? = null,
 ) {
     if (!hasPermission) {
         EmptyState(
@@ -204,6 +206,7 @@ internal fun LibraryScreen(
                 onToggleFavorite = onToggleFavorite,
                 onShare = onShare,
                 grid = gridLayout,
+                listState = listState,
             )
         } else {
             GroupedTrackList(
@@ -214,6 +217,7 @@ internal fun LibraryScreen(
                 onPlayNext = onPlayNext,
                 onToggleFavorite = onToggleFavorite,
                 onShare = onShare,
+                listState = listState,
             )
         }
     }
@@ -242,6 +246,7 @@ internal fun GroupedTrackList(
     onPlayNext: (Track) -> Unit,
     onToggleFavorite: (Track) -> Unit,
     onShare: (Track) -> Unit,
+    listState: LazyListState? = null,
 ) {
     val unknown = stringResource(
         if (grouping == LibraryGrouping.Albums) {
@@ -257,6 +262,7 @@ internal fun GroupedTrackList(
     }
 
     LazyColumn(
+        state = listState,
         modifier = Modifier.fillMaxSize().fadingEdge(bottom = 12.dp),
         contentPadding = PaddingValues(bottom = 12.dp),
     ) {
