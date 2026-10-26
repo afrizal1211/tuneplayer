@@ -120,6 +120,7 @@ dependencies {
     implementation(libs.coil.network.okhttp)
 
     implementation(libs.haze)
+    implementation(libs.androidx.palette)
     implementation(libs.haze.materials)
 
     implementation(libs.innertubex)

@@ -1,7 +1,6 @@
 package com.tuneplayer.app.ui.components
 
 import androidx.compose.animation.Crossfade
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -54,7 +53,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -64,7 +62,8 @@ import androidx.media3.common.Player
 import com.tuneplayer.app.R
 import com.tuneplayer.app.data.model.AudioInfo
 import com.tuneplayer.app.data.model.Track
-import com.tuneplayer.app.ui.theme.ArtworkGradient
+import androidx.compose.ui.graphics.Color
+import com.tuneplayer.app.ui.theme.rememberArtworkPalette
 import com.tuneplayer.app.ui.haptics.Haptic
 import com.tuneplayer.app.ui.haptics.rememberHaptics
 import androidx.compose.runtime.getValue
@@ -119,28 +118,11 @@ internal fun NowPlayingSheet(
         label = "artScale",
     )
 
-    // Backdrop tinted by the artwork's own colors, crossfaded when the track
-    // changes so the sheet never snaps between two palettes.
-    val context = LocalContext.current
-    val gradientStops = remember { mutableStateOf<List<androidx.compose.ui.graphics.Color>?>(null) }
-    LaunchedEffect(track.artworkUri) {
-        val uri = track.artworkUri ?: return@LaunchedEffect
-        val colors = runCatching { ArtworkGradient.fromUri(uri, context) }.getOrNull()
-        gradientStops.value = colors
-    }
-    val surface = MaterialTheme.colorScheme.surface
-    val topColor by animateColorAsState(
-        targetValue = gradientStops.value?.firstOrNull()
-            ?.let { it.copy(alpha = 0.55f) } ?: surface,
-        animationSpec = tween(450),
-        label = "gradientTop",
-    )
-    val bottomColor by animateColorAsState(
-        targetValue = gradientStops.value?.getOrNull(1)
-            ?.let { it.copy(alpha = 0.32f) } ?: surface,
-        animationSpec = tween(450),
-        label = "gradientBottom",
-    )
+    // Backdrop tinted by the artwork's own palette and crossfaded inside the
+    // palette itself when the track changes, so the sheet never snaps.
+    val palette = rememberArtworkPalette(track.artworkUri)
+    val topColor = palette.background.copy(alpha = 0.55f)
+    val bottomColor = palette.wash.copy(alpha = 0.32f)
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -305,6 +287,7 @@ internal fun NowPlayingSheet(
                     durationMs = durationMs,
                     onSeek = onSeek,
                     loading = isBuffering,
+                    accent = palette.accent,
                 )
                 Spacer(Modifier.height(20.dp))
                 Row(

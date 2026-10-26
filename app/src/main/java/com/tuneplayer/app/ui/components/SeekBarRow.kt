@@ -14,6 +14,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.tuneplayer.app.ui.util.formatDuration
 
@@ -29,6 +30,8 @@ internal fun SeekBarRow(
     durationMs: Long,
     onSeek: (Long) -> Unit,
     loading: Boolean = false,
+    /** Artwork-palette accent; null keeps the theme colour. */
+    accent: Color? = null,
 ) {
     var dragging by remember { mutableStateOf(false) }
     var dragValue by remember { mutableFloatStateOf(0f) }
@@ -46,7 +49,7 @@ internal fun SeekBarRow(
                 dragging = false
             },
             loading = loading,
-            activeColor = MaterialTheme.colorScheme.primary,
+            activeColor = accent ?: MaterialTheme.colorScheme.primary,
             inactiveColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.26f),
             modifier = Modifier.padding(horizontal = 4.dp),
         )
