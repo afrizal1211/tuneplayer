@@ -6,6 +6,7 @@ import com.tuneplayer.app.data.prefs.PlaylistStore
 import com.tuneplayer.app.log.LogCatcher
 import com.tuneplayer.app.ui.TunePlayerViewModel
 import kotlinx.coroutines.launch
+import com.tuneplayer.app.ui.TunePlayerViewModel.Companion.TAG
 
 internal fun TunePlayerViewModel.playlists(): List<PlaylistStore.Playlist> = playlistStore.all()
 

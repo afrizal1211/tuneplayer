@@ -4,6 +4,8 @@ import androidx.lifecycle.viewModelScope
 import com.tuneplayer.app.ui.TunePlayerViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import com.tuneplayer.app.ui.DEFAULT_SLEEP_MINUTES
+import com.tuneplayer.app.ui.TunePlayerViewModel.Companion.END_TOLERANCE_MS
 
 /**
  * Sleep timer is wall-clock: it counts down regardless of pause or track changes.

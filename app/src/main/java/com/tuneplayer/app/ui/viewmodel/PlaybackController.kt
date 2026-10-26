@@ -22,6 +22,8 @@ import com.tuneplayer.app.ui.TunePlayerViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import com.tuneplayer.app.ui.TunePlayerViewModel.Companion.MAX_RESOLVED_CACHE
+import com.tuneplayer.app.ui.TunePlayerViewModel.Companion.TAG
 
 internal fun TunePlayerViewModel.startPositionPolling() {
     positionPollJob?.cancel()
@@ -145,7 +147,7 @@ internal fun TunePlayerViewModel.play(track: Track) {
 }
 
 /** Adds [track] to the queue and points [TunePlayerUiState.queueIndex] at it. */
-internal fun TunePlayerViewModel.startTrack(track: Track) {
+internal suspend fun TunePlayerViewModel.startTrack(track: Track) {
     val offlineUri = app.offlineDownloadManager.localUri(track.id)
     if (offlineUri != null) {
         playResolved(track, offlineUri, null, null)

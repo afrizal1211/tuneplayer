@@ -54,6 +54,7 @@ import com.tuneplayer.app.playback.PlaybackService
 import com.tuneplayer.app.playback.PlaybackKeys
 import com.tuneplayer.app.playback.QueueBuilder
 import com.tuneplayer.app.widget.NowPlayingWidget
+import com.tuneplayer.app.ui.viewmodel.*
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -61,10 +62,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONObject
 
-private const val DEFAULT_SLEEP_MINUTES = 30
+internal const val DEFAULT_SLEEP_MINUTES = 30
 
 /** How long a buffering track may keep the last Discord card before hiding it. */
-private const val DISCORD_HOLD_TIMEOUT_MS = 8_000L
+internal const val DISCORD_HOLD_TIMEOUT_MS = 8_000L
 
 data class TunePlayerUiState(
     val localTracks: List<Track> = emptyList(),

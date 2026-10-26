@@ -7,6 +7,7 @@ import com.tuneplayer.app.data.model.Track
 import com.tuneplayer.app.log.LogCatcher
 import com.tuneplayer.app.ui.TunePlayerViewModel
 import kotlinx.coroutines.launch
+import com.tuneplayer.app.ui.TunePlayerViewModel.Companion.TAG
 
 /** Appends [track] to the end of the queue without disturbing playback. */
 internal fun TunePlayerViewModel.addToQueue(track: Track) {

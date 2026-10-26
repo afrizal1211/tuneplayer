@@ -6,6 +6,7 @@ import com.tuneplayer.app.data.model.YouTubeAudioQuality
 import com.tuneplayer.app.data.prefs.AppTheme
 import com.tuneplayer.app.log.LogCatcher
 import com.tuneplayer.app.ui.TunePlayerViewModel
+import com.tuneplayer.app.ui.TunePlayerViewModel.Companion.TAG
 
 internal fun TunePlayerViewModel.setKeepScreenOn(enabled: Boolean) {
     app.settingsStore.keepScreenOn = enabled

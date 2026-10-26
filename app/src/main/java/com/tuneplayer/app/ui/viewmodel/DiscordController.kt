@@ -15,6 +15,8 @@ import com.tuneplayer.app.ui.TunePlayerViewModel
 import com.tuneplayer.app.widget.NowPlayingWidget
 import kotlinx.coroutines.launch
 import org.json.JSONObject
+import com.tuneplayer.app.ui.DISCORD_HOLD_TIMEOUT_MS
+import com.tuneplayer.app.ui.TunePlayerViewModel.Companion.MAX_DISCORD_TEXT
 
 internal fun TunePlayerViewModel.setDiscordRpcEnabled(enabled: Boolean) {
     app.settingsStore.discordRpcEnabled = enabled
@@ -81,7 +83,7 @@ internal fun TunePlayerViewModel.removeDiscordApplicationId() {
  * visible card rather than flickering the presence off and back on, and a
  * stalled stream falls back to a cleared card.
  */
-internal fun TunePlayerViewModel.updateDiscordPresence() {
+internal suspend fun TunePlayerViewModel.updateDiscordPresence() {
     val settings = app.settingsStore
     if (!settings.discordRpcEnabled || settings.discordToken == null) {
         discordHold = null
@@ -144,7 +146,7 @@ internal fun TunePlayerViewModel.updateDiscordPresence() {
     }
 }
 
-internal fun TunePlayerViewModel.buildDiscordActivity(track: Track, isPaused: Boolean): JSONObject {
+internal suspend fun TunePlayerViewModel.buildDiscordActivity(track: Track, isPaused: Boolean): JSONObject {
     val appName = app.getString(R.string.app_name).take(MAX_DISCORD_TEXT)
     val title = track.title.trim().ifBlank { appName }.take(MAX_DISCORD_TEXT)
     val artist = track.artist.trim()

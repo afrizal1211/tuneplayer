@@ -12,6 +12,7 @@ import com.tuneplayer.app.ui.TunePlayerViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import com.tuneplayer.app.ui.TunePlayerViewModel.Companion.TAG
 
 /** Positive values delay lyrics; negative values show them earlier. */
 internal fun TunePlayerViewModel.setLyricsOffsetMs(offsetMs: Long) {
@@ -116,7 +117,7 @@ internal fun TunePlayerViewModel.fetchLyrics(track: Track, showLoading: Boolean,
     }
 }
 
-internal fun TunePlayerViewModel.resolveLyrics(track: Track): LyricsLookup? {
+internal suspend fun TunePlayerViewModel.resolveLyrics(track: Track): LyricsLookup? {
     val youtubeText = track.videoId?.let { videoId ->
         withTimeoutOrNull(6_000L) {
             runCatching { youTubeRepository.fetchLyrics(videoId) }.getOrNull()

@@ -10,6 +10,7 @@ import com.tuneplayer.app.ui.TunePlayerViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import com.tuneplayer.app.ui.TunePlayerViewModel.Companion.TAG
 
 internal fun TunePlayerViewModel.loadLocalMusic() {
     viewModelScope.launch {
