@@ -4,43 +4,56 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.ui.Modifier
-import com.tuneplayer.app.ui.util.formatDuration
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import com.tuneplayer.app.ui.util.formatDuration
 
+/**
+ * The scrubber row: [ThinSlider] plus the current and remaining times.
+ *
+ * [loading] shows the sheen instead of the fill — pass it while a stream is
+ * being resolved, when the position has nothing meaningful to draw.
+ */
 @Composable
 internal fun SeekBarRow(
     positionMs: Long,
     durationMs: Long,
     onSeek: (Long) -> Unit,
+    loading: Boolean = false,
 ) {
     var dragging by remember { mutableStateOf(false) }
     var dragValue by remember { mutableFloatStateOf(0f) }
     val max = durationMs.coerceAtLeast(1L).toFloat()
 
     Column(modifier = Modifier.fillMaxWidth()) {
-        Slider(
-            value = if (dragging) dragValue else positionMs.coerceIn(0L, durationMs).toFloat(),
+        ThinSlider(
+            value = (if (dragging) dragValue else positionMs.coerceIn(0L, durationMs).toFloat()) / max,
             onValueChange = {
                 dragging = true
-                dragValue = it
+                dragValue = it * max
             },
             onValueChangeFinished = {
                 onSeek(dragValue.toLong())
                 dragging = false
             },
-            valueRange = 0f..max,
+            loading = loading,
+            activeColor = MaterialTheme.colorScheme.primary,
+            inactiveColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.26f),
+            modifier = Modifier.padding(horizontal = 4.dp),
         )
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 4.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             Text(

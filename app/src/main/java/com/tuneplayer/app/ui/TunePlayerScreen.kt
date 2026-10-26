@@ -582,6 +582,7 @@ fun TunePlayerScreen(
                 track = playingTrack,
                 audioInfo = state.audioInfo,
                 isPlaying = state.isPlaying,
+                isBuffering = state.isBuffering,
                 isShuffleEnabled = state.isShuffleEnabled,
                 repeatMode = state.repeatMode,
                 isFavorite = playingTrack.id in state.favoriteIds,

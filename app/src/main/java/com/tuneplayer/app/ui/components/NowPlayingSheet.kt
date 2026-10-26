@@ -78,6 +78,7 @@ internal fun NowPlayingSheet(
     track: Track,
     audioInfo: AudioInfo?,
     isPlaying: Boolean,
+    isBuffering: Boolean = false,
     isShuffleEnabled: Boolean,
     repeatMode: Int,
     isFavorite: Boolean,
@@ -305,6 +306,7 @@ internal fun NowPlayingSheet(
                     positionMs = positionMs,
                     durationMs = durationMs,
                     onSeek = onSeek,
+                    loading = isBuffering,
                 )
                 Spacer(Modifier.height(20.dp))
                 Row(

@@ -85,6 +85,7 @@ data class TunePlayerUiState(
     val isLoadingLocal: Boolean = false,
     val isSearching: Boolean = false,
     val isPlaying: Boolean = false,
+    val isBuffering: Boolean = false,
     val error: String? = null,
     val sleepDurationMillis: Long = 0,
     val isSleepTimerActive: Boolean = false,
@@ -259,6 +260,7 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
 
                             override fun onPlaybackStateChanged(playbackState: Int) {
                                 playerPlaybackState = playbackState
+                                uiState = uiState.copy(isBuffering = playbackState == Player.STATE_BUFFERING)
                                 if (playbackState == Player.STATE_ENDED) advanceAfterTrackEnded()
                             }
 
