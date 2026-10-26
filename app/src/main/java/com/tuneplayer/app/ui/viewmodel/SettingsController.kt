@@ -7,6 +7,9 @@ import com.tuneplayer.app.data.prefs.AppTheme
 import com.tuneplayer.app.log.LogCatcher
 import com.tuneplayer.app.ui.TunePlayerViewModel
 import com.tuneplayer.app.ui.TunePlayerViewModel.Companion.TAG
+import com.tuneplayer.app.ui.AudioEffects
+import com.tuneplayer.app.ui.EqPresets
+import com.tuneplayer.app.ui.ThemeController
 
 internal fun TunePlayerViewModel.setKeepScreenOn(enabled: Boolean) {
     app.settingsStore.keepScreenOn = enabled
