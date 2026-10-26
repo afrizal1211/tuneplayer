@@ -65,6 +65,7 @@ import com.tuneplayer.app.ui.fadingEdge
 import com.tuneplayer.app.ui.util.formatDuration
 import com.tuneplayer.app.ui.components.DownloadIconButton
 import com.tuneplayer.app.ui.components.TrackRow
+import com.tuneplayer.app.ui.components.TrackListSkeleton
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
