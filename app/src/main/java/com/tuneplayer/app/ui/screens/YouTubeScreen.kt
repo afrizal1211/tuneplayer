@@ -366,7 +366,7 @@ internal fun searchFilterLabel(filter: YouTubeSearchFilter): String = when (filt
 internal fun SearchLoading() {
     Column(modifier = Modifier.fillMaxSize()) {
         Spacer(Modifier.height(8.dp))
-        trackListSkeleton(count = 10, keyPrefix = "skeleton:search")
+        TrackListSkeleton(count = 10)
     }
 }
 

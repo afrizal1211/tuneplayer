@@ -15,8 +15,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyListScope
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -121,11 +119,7 @@ internal fun TrackRowSkeleton(index: Int = 0, modifier: Modifier = Modifier) {
 }
 
 /** A run of track-row placeholders, for lists still loading their content. */
-internal fun LazyListScope.trackListSkeleton(
-    count: Int = 8,
-    keyPrefix: String = "skeleton:track",
-) {
-    items(count, key = { "$keyPrefix:$it" }) { index ->
-        TrackRowSkeleton(index = index)
-    }
+@Composable
+internal fun TrackListSkeleton(count: Int = 8) {
+    repeat(count) { index -> TrackRowSkeleton(index = index) }
 }
