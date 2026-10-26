@@ -1,0 +1,131 @@
+package com.tuneplayer.app.ui.components
+
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+
+/**
+ * Grey stand-ins for content still on the wire, laid out to the same metrics as
+ * the real rows so nothing jumps when the data lands.
+ *
+ * Adapted from BitChord (Apache-2.0); the row metrics match [TrackList]'s.
+ */
+
+/** How long one highlight sweep takes to cross a placeholder. */
+private const val SHIMMER_PERIOD_MS = 1400
+
+private val BlockShape = RoundedCornerShape(6.dp)
+private val LineShape = RoundedCornerShape(4.dp)
+
+/** Page gutter, matching the screens' own content padding. */
+private val PAGE_GUTTER = 16.dp
+
+// Ragged widths, so a run of rows reads as text rather than as a barcode.
+private val TitleWidths = listOf(0.68f, 0.46f, 0.58f, 0.74f, 0.52f)
+private val SubtitleWidths = listOf(0.34f, 0.44f, 0.27f, 0.38f, 0.31f)
+
+/**
+ * One placeholder block, with a highlight sweeping across it.
+ *
+ * The sweep is read inside the draw block rather than the composable body: a
+ * screenful of these would otherwise recompose on every animation frame, and
+ * all any of them needs per frame is a fresh gradient.
+ */
+@Composable
+internal fun ShimmerBox(modifier: Modifier = Modifier, shape: Shape = BlockShape) {
+    val base = MaterialTheme.colorScheme.surfaceVariant
+    val highlight = MaterialTheme.colorScheme.onSurfaceVariant
+        .copy(alpha = 0.16f)
+        .compositeOver(base)
+    val sweep = rememberInfiniteTransition(label = "skeleton").animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(SHIMMER_PERIOD_MS, easing = LinearEasing)),
+        label = "sweep",
+    )
+    Box(
+        modifier
+            .clip(shape)
+            .drawWithCache {
+                // The band travels from fully off one edge to fully off the
+                // other, which leaves a beat of flat grey between passes rather
+                // than a highlight permanently parked somewhere on the block.
+                val band = size.width * 0.5f
+                val startX = -band + sweep.value * (size.width + band * 2)
+                val brush = Brush.horizontalGradient(
+                    colors = listOf(base, highlight, base),
+                    startX = startX,
+                    endX = startX + band,
+                )
+                onDrawBehind { drawRect(brush) }
+            },
+    )
+}
+
+/** A placeholder for one line of text, sized as a fraction of its parent. */
+@Composable
+private fun SkeletonLine(fraction: Float, height: Dp, modifier: Modifier = Modifier) {
+    ShimmerBox(
+        modifier = modifier.fillMaxWidth(fraction).height(height),
+        shape = LineShape,
+    )
+}
+
+/**
+ * Stands in for one track row: the 52dp of artwork at a 12dp corner, the
+ * 8dp vertical padding, the two text lines beneath.
+ */
+@Composable
+internal fun TrackRowSkeleton(index: Int = 0, modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = PAGE_GUTTER, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        ShimmerBox(Modifier.size(52.dp), RoundedCornerShape(12.dp))
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f)) {
+            SkeletonLine(fraction = TitleWidths[index % TitleWidths.size], height = 14.dp)
+            Spacer(Modifier.height(7.dp))
+            SkeletonLine(fraction = SubtitleWidths[index % SubtitleWidths.size], height = 11.dp)
+        }
+    }
+}
+
+/** A run of track-row placeholders, for lists still loading their content. */
+internal fun LazyListScope.trackListSkeleton(
+    count: Int = 8,
+    keyPrefix: String = "skeleton:track",
+) {
+    items(count, key = { "$keyPrefix:$it" }) { index ->
+        TrackRowSkeleton(index = index)
+    }
+}

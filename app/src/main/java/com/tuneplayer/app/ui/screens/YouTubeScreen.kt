@@ -364,8 +364,9 @@ internal fun searchFilterLabel(filter: YouTubeSearchFilter): String = when (filt
 
 @Composable
 internal fun SearchLoading() {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        CircularProgressIndicator()
+    Column(modifier = Modifier.fillMaxSize()) {
+        Spacer(Modifier.height(8.dp))
+        trackListSkeleton(count = 10, keyPrefix = "skeleton:search")
     }
 }
 

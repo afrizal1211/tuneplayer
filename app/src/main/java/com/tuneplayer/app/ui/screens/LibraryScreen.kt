@@ -54,6 +54,7 @@ import com.tuneplayer.app.data.lyrics.LyricsSource
 import com.tuneplayer.app.data.model.LibrarySort
 import com.tuneplayer.app.data.model.Track
 import com.tuneplayer.app.ui.components.EmptyState
+import com.tuneplayer.app.ui.components.trackListSkeleton
 import com.tuneplayer.app.ui.components.TrackList
 import com.tuneplayer.app.ui.fadingEdge
 import androidx.compose.runtime.getValue
@@ -99,8 +100,9 @@ internal fun LibraryScreen(
     }
 
     if (isLoading && tracks.isEmpty()) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator()
+        Column(modifier = Modifier.fillMaxSize()) {
+            Spacer(Modifier.height(8.dp))
+            trackListSkeleton(count = 10)
         }
         return
     }
