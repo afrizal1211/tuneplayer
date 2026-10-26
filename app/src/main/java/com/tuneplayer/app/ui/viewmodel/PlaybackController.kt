@@ -12,6 +12,7 @@ import androidx.media3.common.util.UnstableApi
 import com.metrolist.innertubex.extraction.StreamResolveException
 import com.tuneplayer.app.R
 import com.tuneplayer.app.data.lyrics.activeLineIndex
+import com.tuneplayer.app.data.lyrics.activeLyricRows
 import com.tuneplayer.app.data.lyrics.activeWordIndex
 import com.tuneplayer.app.data.model.AudioInfo
 import com.tuneplayer.app.data.model.Track
@@ -54,8 +55,13 @@ internal fun TunePlayerViewModel.startPositionPolling() {
                 } else {
                     activeWordIndex(lines[idx], position)
                 }
-                if (idx != uiState.activeLyricIndex) {
-                    uiState = uiState.copy(activeLyricIndex = idx, activeWordIndex = word)
+                val rows = activeLyricRows(lines, position)
+                if (idx != uiState.activeLyricIndex || rows != uiState.activeLyricRows) {
+                    uiState = uiState.copy(
+                        activeLyricIndex = idx,
+                        activeWordIndex = word,
+                        activeLyricRows = rows,
+                    )
                 } else if (word != uiState.activeWordIndex) {
                     uiState = uiState.copy(activeWordIndex = word)
                 }
@@ -301,6 +307,7 @@ internal fun TunePlayerViewModel.playResolved(
         syncedLyrics = emptyList(),
         activeLyricIndex = -1,
         activeWordIndex = -1,
+        activeLyricRows = emptyList(),
         lyricsSource = null,
         isLoadingLyrics = false,
     )

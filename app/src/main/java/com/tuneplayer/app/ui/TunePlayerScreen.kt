@@ -621,6 +621,7 @@ fun TunePlayerScreen(
                 syncedLyrics = state.syncedLyrics,
                 activeLyricIndex = state.activeLyricIndex,
                 activeWordIndex = state.activeWordIndex,
+                activeLyricRows = state.activeLyricRows,
                 lyricsOffsetMs = state.lyricsOffsetMs,
                 lyricsSource = state.lyricsSource,
                 positionMs = state.positionMs,

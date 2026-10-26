@@ -59,6 +59,7 @@ internal fun LyricsSheet(
     syncedLyrics: List<LyricsLine>,
     activeLyricIndex: Int,
     activeWordIndex: Int,
+    activeLyricRows: List<Int>,
     lyricsOffsetMs: Long,
     lyricsSource: LyricsSource?,
     positionMs: Long,
@@ -238,6 +239,7 @@ internal fun LyricsSheet(
                     lines = syncedLyrics,
                     activeIndex = activeLyricIndex,
                     activeWordIndex = activeWordIndex,
+                    activeRows = activeLyricRows,
                 )
                 lyrics != null -> Text(
                     text = lyrics,

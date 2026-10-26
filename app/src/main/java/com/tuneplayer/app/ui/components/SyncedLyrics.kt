@@ -14,6 +14,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.TransformOrigin
@@ -33,13 +34,18 @@ internal fun SyncedLyrics(
     lines: List<LyricsLine>,
     activeIndex: Int,
     activeWordIndex: Int,
+    activeRows: List<Int> = emptyList(),
 ) {
+    // The uppermost still-sung row owns the scroll anchor until it ends, even
+    // as later rows begin their own highlights.
+    val anchor = activeRows.firstOrNull() ?: activeIndex
     val listState = rememberLazyListState()
-    LaunchedEffect(activeIndex) {
-        if (activeIndex in lines.indices) {
-            listState.animateScrollToItem(activeIndex)
+    LaunchedEffect(anchor) {
+        if (anchor in lines.indices) {
+            listState.animateScrollToItem(anchor)
         }
     }
+    val litRows = remember(activeRows) { activeRows.toHashSet() }
     LazyColumn(
         state = listState,
         modifier = Modifier
@@ -48,6 +54,7 @@ internal fun SyncedLyrics(
     ) {
         itemsIndexed(lines) { index, line ->
             val active = index == activeIndex
+            val rowLit = index != activeIndex && index in litRows
             // Word timing only exists for the active line, so the word index
             // applies to it and nothing else.
             val words = line.words?.takeIf { active && it.isNotEmpty() }
@@ -55,6 +62,7 @@ internal fun SyncedLyrics(
             val scale by animateFloatAsState(
                 targetValue = when {
                     active -> 1.12f
+                    rowLit -> 1.06f
                     distance == 1 -> 1.0f
                     distance == 2 -> 0.94f
                     else -> 0.88f
@@ -68,6 +76,7 @@ internal fun SyncedLyrics(
             val alpha by animateFloatAsState(
                 targetValue = when {
                     active -> 1f
+                    rowLit -> 0.85f
                     distance == 1 -> 0.75f
                     distance == 2 -> 0.5f
                     else -> 0.32f
@@ -78,8 +87,8 @@ internal fun SyncedLyrics(
             Text(
                 text = line.annotated(active && words != null, activeWordIndex),
                 style = MaterialTheme.typography.bodyLarge,
-                fontWeight = if (active) FontWeight.Bold else FontWeight.Medium,
-                color = if (active) {
+                fontWeight = if (active || rowLit) FontWeight.Bold else FontWeight.Medium,
+                color = if (active || rowLit) {
                     MaterialTheme.colorScheme.primary
                 } else {
                     MaterialTheme.colorScheme.onSurfaceVariant

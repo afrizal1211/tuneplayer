@@ -5,6 +5,7 @@ import com.tuneplayer.app.data.lyrics.LyricsLookup
 import com.tuneplayer.app.data.lyrics.LyricsParser
 import com.tuneplayer.app.data.lyrics.LyricsSource
 import com.tuneplayer.app.data.lyrics.activeLineIndex
+import com.tuneplayer.app.data.lyrics.activeLyricRows
 import com.tuneplayer.app.data.lyrics.activeWordIndex
 import com.tuneplayer.app.data.model.Track
 import com.tuneplayer.app.log.LogCatcher
@@ -31,6 +32,7 @@ internal fun TunePlayerViewModel.setLyricsOffsetMs(offsetMs: Long) {
         lyricsOffsetMs = clamped,
         activeLyricIndex = active,
         activeWordIndex = -1,
+        activeLyricRows = activeLyricRows(lines, (uiState.positionMs - clamped).coerceAtLeast(0L)),
     )
 }
 
@@ -80,6 +82,7 @@ internal fun TunePlayerViewModel.fetchLyrics(track: Track, showLoading: Boolean,
             syncedLyrics = emptyList(),
             activeLyricIndex = -1,
             activeWordIndex = -1,
+            activeLyricRows = emptyList(),
             lyricsSource = null,
         )
     }
@@ -94,6 +97,7 @@ internal fun TunePlayerViewModel.fetchLyrics(track: Track, showLoading: Boolean,
                         syncedLyrics = emptyList(),
                         activeLyricIndex = -1,
                         activeWordIndex = -1,
+                        activeLyricRows = emptyList(),
                         lyricsSource = null,
                     )
                 }
@@ -175,6 +179,7 @@ internal fun TunePlayerViewModel.applyLyrics(trackId: String, lookup: LyricsLook
     val synced = LyricsParser.parse(lookup.text)
     val position = (uiState.positionMs - uiState.lyricsOffsetMs).coerceAtLeast(0L)
     val active = if (synced.isEmpty()) -1 else activeLineIndex(synced, position)
+    val rows = activeLyricRows(synced, position)
     val word = if (active >= 0) activeWordIndex(synced[active], position) else -1
     uiState = uiState.copy(
         isLoadingLyrics = false,
@@ -182,6 +187,7 @@ internal fun TunePlayerViewModel.applyLyrics(trackId: String, lookup: LyricsLook
         syncedLyrics = synced,
         activeLyricIndex = active,
         activeWordIndex = word,
+        activeLyricRows = rows,
         lyricsSource = lookup.source,
     )
 }
@@ -196,6 +202,7 @@ internal fun TunePlayerViewModel.clearLyricsState() {
         syncedLyrics = emptyList(),
         activeLyricIndex = -1,
         activeWordIndex = -1,
+        activeLyricRows = emptyList(),
         lyricsSource = null,
     )
 }

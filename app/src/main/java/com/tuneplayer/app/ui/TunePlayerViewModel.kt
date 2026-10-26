@@ -118,6 +118,8 @@ data class TunePlayerUiState(
     val activeLyricIndex: Int = -1,
     /** Word within [activeLyricIndex] currently being sung, or -1 for line-only lyrics. */
     val activeWordIndex: Int = -1,
+    /** Every line still being sung, including overlaps over the active one. */
+    val activeLyricRows: List<Int> = emptyList(),
     val positionMs: Long = 0L,
     val durationMs: Long = 0L,
     val isShuffleEnabled: Boolean = false,
