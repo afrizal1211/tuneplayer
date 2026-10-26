@@ -54,9 +54,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -67,7 +65,8 @@ import com.tuneplayer.app.R
 import com.tuneplayer.app.data.model.AudioInfo
 import com.tuneplayer.app.data.model.Track
 import com.tuneplayer.app.ui.theme.ArtworkGradient
-import com.tuneplayer.app.ui.util.LocalHapticsEnabled
+import com.tuneplayer.app.ui.haptics.Haptic
+import com.tuneplayer.app.ui.haptics.rememberHaptics
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import com.tuneplayer.app.ui.components.DownloadIconButton
@@ -97,8 +96,7 @@ internal fun NowPlayingSheet(
     onOpenQueue: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val hapticsEnabled = LocalHapticsEnabled.current
-    val hapticFeedback = LocalHapticFeedback.current
+    val haptics = rememberHaptics()
     val playPauseScale by animateFloatAsState(
         targetValue = if (isPlaying) 1f else 0.9f,
         animationSpec = spring(
@@ -338,9 +336,7 @@ internal fun NowPlayingSheet(
                     }
                     FilledIconButton(
                         onClick = {
-                            if (hapticsEnabled) {
-                                hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
-                            }
+                            haptics.play(if (isPlaying) Haptic.Pause else Haptic.Resume)
                             onTogglePlayPause()
                         },
                         modifier = Modifier
@@ -393,9 +389,7 @@ internal fun NowPlayingSheet(
                 ) {
                     IconButton(
                         onClick = {
-                            if (hapticsEnabled) {
-                                hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
-                            }
+                            haptics.play(if (isFavorite) Haptic.ToggleOff else Haptic.ToggleOn)
                             onToggleFavorite(track)
                         },
                     ) {

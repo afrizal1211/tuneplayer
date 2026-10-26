@@ -46,8 +46,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -56,7 +54,8 @@ import com.tuneplayer.app.data.model.Track
 import com.tuneplayer.app.ui.fadingEdge
 import com.tuneplayer.app.ui.util.LocalDownloadTrack
 import com.tuneplayer.app.ui.util.LocalDownloadUiState
-import com.tuneplayer.app.ui.util.LocalHapticsEnabled
+import com.tuneplayer.app.ui.haptics.Haptic
+import com.tuneplayer.app.ui.haptics.rememberHaptics
 import com.tuneplayer.app.ui.util.LocalNowPlayingId
 import com.tuneplayer.app.ui.util.LocalRemoveDownload
 import com.tuneplayer.app.ui.util.formatDuration
@@ -170,8 +169,7 @@ internal fun TrackRow(
     val onDownloadTrack = LocalDownloadTrack.current
     val onRemoveDownload = LocalRemoveDownload.current
     val isCurrent = LocalNowPlayingId.current == track.id
-    val hapticsEnabled = LocalHapticsEnabled.current
-    val hapticFeedback = LocalHapticFeedback.current
+    val haptics = rememberHaptics()
 
     ListItem(
         modifier = Modifier
@@ -264,9 +262,7 @@ internal fun TrackRow(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(
                     onClick = {
-                        if (hapticsEnabled) {
-                            hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
-                        }
+                        haptics.play(if (isFavorite) Haptic.ToggleOff else Haptic.ToggleOn)
                         onToggleFavorite()
                     },
                 ) {

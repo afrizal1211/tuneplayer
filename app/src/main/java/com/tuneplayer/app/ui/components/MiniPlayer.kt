@@ -37,15 +37,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.tuneplayer.app.R
 import com.tuneplayer.app.data.model.Track
-import com.tuneplayer.app.ui.util.LocalHapticsEnabled
+import com.tuneplayer.app.ui.haptics.Haptic
+import com.tuneplayer.app.ui.haptics.rememberHaptics
 import androidx.compose.runtime.getValue
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -77,8 +76,7 @@ internal fun MiniPlayer(
         ),
         label = "miniPlayScale",
     )
-    val hapticsEnabled = LocalHapticsEnabled.current
-    val hapticFeedback = LocalHapticFeedback.current
+    val haptics = rememberHaptics()
 
     Box(
         modifier = Modifier
@@ -103,7 +101,10 @@ internal fun MiniPlayer(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable(onClick = onOpenPlayer)
+                        .clickable(onClick = {
+                            haptics.play(Haptic.Expand)
+                            onOpenPlayer()
+                        })
                         .padding(horizontal = 12.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -157,9 +158,7 @@ internal fun MiniPlayer(
                     }
                     IconButton(
                         onClick = {
-                            if (hapticsEnabled) {
-                                hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
-                            }
+                            haptics.play(if (isPlaying) Haptic.Pause else Haptic.Resume)
                             onTogglePlayPause()
                         },
                     ) {
@@ -184,9 +183,7 @@ internal fun MiniPlayer(
                     }
                     IconButton(
                         onClick = {
-                            if (hapticsEnabled) {
-                                hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
-                            }
+                            haptics.play(Haptic.SkipNext)
                             onSkipNext()
                         },
                     ) {
