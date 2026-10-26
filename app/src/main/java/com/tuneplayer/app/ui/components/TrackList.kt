@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items as gridItems
@@ -91,8 +92,9 @@ internal fun TrackList(
         }
         return
     }
+    val effectiveListState = listState ?: rememberLazyListState()
     LazyColumn(
-        state = listState,
+        state = effectiveListState,
         modifier = Modifier.fillMaxSize().fadingEdge(top = 12.dp, bottom = 12.dp),
         contentPadding = PaddingValues(bottom = 12.dp),
     ) {

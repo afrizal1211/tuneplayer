@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
@@ -95,7 +96,8 @@ internal fun PlaylistsScreen(
             return@Column
         }
 
-        LazyColumn(state = listState, modifier = Modifier.fillMaxSize().fadingEdge(bottom = 12.dp)) {
+    val effectiveListState = listState ?: rememberLazyListState()
+        LazyColumn(state = effectiveListState, modifier = Modifier.fillMaxSize().fadingEdge(bottom = 12.dp)) {
             items(items = playlists, key = { it.id }) { playlist ->
                 val count = tracksFor(playlist).size
                 ListItem(

@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
@@ -105,8 +106,9 @@ internal fun QueueScreen(
                 Text(stringResource(R.string.action_clear))
             }
         }
+    val effectiveListState = listState ?: rememberLazyListState()
         LazyColumn(
-            state = listState,
+            state = effectiveListState,
             modifier = Modifier.fillMaxSize().fadingEdge(bottom = 12.dp),
             contentPadding = PaddingValues(bottom = 12.dp),
         ) {

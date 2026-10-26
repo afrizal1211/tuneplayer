@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
@@ -261,8 +262,9 @@ internal fun GroupedTrackList(
             .sortedBy { (name, _) -> name.lowercase() }
     }
 
+    val effectiveListState = listState ?: rememberLazyListState()
     LazyColumn(
-        state = listState,
+        state = effectiveListState,
         modifier = Modifier.fillMaxSize().fadingEdge(bottom = 12.dp),
         contentPadding = PaddingValues(bottom = 12.dp),
     ) {
