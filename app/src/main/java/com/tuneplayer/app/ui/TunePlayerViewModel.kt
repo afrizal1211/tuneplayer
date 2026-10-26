@@ -169,7 +169,6 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
     internal var playerPlaybackState: Int = Player.STATE_IDLE
 
     internal var uiState by mutableStateOf(TunePlayerUiState())
-        private set
 
     internal val controllerFuture = MediaController.Builder(
         application,
