@@ -74,7 +74,7 @@ import com.tuneplayer.app.R
 import com.tuneplayer.app.ui.viewmodel.*
 import com.tuneplayer.app.ui.components.Artwork
 import com.tuneplayer.app.ui.components.EmptyState
-import com.tuneplayer.app.ui.components.LyricsSheet
+import com.tuneplayer.app.ui.screens.LyricsScreen
 import com.tuneplayer.app.ui.components.MiniPlayer
 import com.tuneplayer.app.ui.components.NowPlayingSheet
 import com.tuneplayer.app.ui.components.SleepTimerDialog
@@ -591,7 +591,7 @@ fun TunePlayerScreen(
             )
         }
         if (showLyricsSheet) {
-            LyricsSheet(
+            LyricsScreen(
                 track = state.currentTrack,
                 lyrics = state.lyrics,
                 isLoading = state.isLoadingLyrics,
@@ -611,8 +611,8 @@ fun TunePlayerScreen(
                 onTogglePlayPause = viewModel::togglePlayPause,
                 onToggleShuffle = viewModel::toggleShuffle,
                 onCycleRepeat = viewModel::cycleRepeatMode,
-                onToggleFavorite = viewModel::toggleFavorite,
-                onShare = { track -> shareTrack(context, track) },
+                onToggleFavorite = { state.currentTrack?.let { viewModel.toggleFavorite(it) } },
+                onShare = { state.currentTrack?.let { shareTrack(context, it) } },
                 onLyricsOffsetChange = viewModel::setLyricsOffsetMs,
                 onRefreshLyrics = viewModel::refreshLyrics,
                 onDismiss = { showLyricsSheet = false },

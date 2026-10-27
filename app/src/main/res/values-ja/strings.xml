@@ -28,6 +28,9 @@
     <string name="action_shuffle">シャッフル</string>
     <string name="action_repeat">リピート</string>
     <string name="action_favorite">お気に入り</string>
+    <string name="action_back">戻る</string>
+    <string name="action_next">次へ</string>
+    <string name="action_previous">前へ</string>
     <string name="action_share">共有</string>
     <string name="action_play_next">次に再生</string>
     <string name="action_move_up">上へ移動</string>

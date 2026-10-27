@@ -27,6 +27,9 @@
     <string name="action_shuffle">Shuffle</string>
     <string name="action_repeat">Repeat</string>
     <string name="action_favorite">Favorite</string>
+    <string name="action_back">Back</string>
+    <string name="action_next">Next</string>
+    <string name="action_previous">Previous</string>
     <string name="action_share">Share</string>
     <string name="action_play_next">Play next</string>
     <string name="action_move_up">Move up</string>
