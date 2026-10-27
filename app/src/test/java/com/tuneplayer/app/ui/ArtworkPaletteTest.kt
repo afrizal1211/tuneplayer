@@ -8,17 +8,17 @@ import org.junit.Test
 class ArtworkPaletteTest {
     @Test
     fun neutralSaturationKeptBelowChromaticThreshold() {
-        assertEquals(0.05f, adaptedArtworkSaturation(0.05f, minimum = 0.20f, maximum = 0.62f), 0.0001f)
+        assertEquals(0.05f, adaptedArtworkSaturation(0.05f, minimum = 0.20f, maximum = 0.62f))
     }
 
     @Test
     fun chromaticSaturationLiftedToTheFloor() {
-        assertEquals(0.20f, adaptedArtworkSaturation(0.14f, minimum = 0.20f, maximum = 0.62f), 0.0001f)
+        assertEquals(0.20f, adaptedArtworkSaturation(0.14f, minimum = 0.20f, maximum = 0.62f))
     }
 
     @Test
     fun chromaticSaturationCappedAtTheCeiling() {
-        assertEquals(0.62f, adaptedArtworkSaturation(0.95f, minimum = 0.20f, maximum = 0.62f), 0.0001f)
+        assertEquals(0.62f, adaptedArtworkSaturation(0.95f, minimum = 0.20f, maximum = 0.62f))
     }
 
     @Test
