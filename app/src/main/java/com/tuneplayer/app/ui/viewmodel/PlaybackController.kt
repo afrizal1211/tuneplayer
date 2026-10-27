@@ -311,7 +311,7 @@ internal fun TunePlayerViewModel.playResolved(
         lyricsSource = null,
         isLoadingLyrics = false,
     )
-    recordHistory(track.id)
+    recordHistory(track)
     prefetchLyrics(track)
     publishWidgetState()
 }
@@ -387,18 +387,22 @@ internal fun TunePlayerViewModel.cacheResolvedUri(trackId: String, uri: String) 
     }
 }
 
-internal fun TunePlayerViewModel.recordHistory(id: String) {
-    favoriteStore.recordPlay(id)
-    playStatsStore.record(id)
+internal fun TunePlayerViewModel.recordHistory(track: Track) {
+    favoriteStore.recordPlay(track.id)
+    playStatsStore.record(track.id)
     // Room mirror: events log + month-bucketed play counts.
+    // Seed the song row first so event.songId FK target exists for any track
+    // reached via direct play/queue paths (not just PlaylistController).
     viewModelScope.launch {
         runCatching {
+            val dao = app.database.dao()
+            dao.upsertSong(com.tuneplayer.app.data.db.SongEntity.fromTrack(track))
             val now = System.currentTimeMillis()
-            app.database.dao().insertEvent(
-                com.tuneplayer.app.data.db.EventEntity(songId = id, timestamp = now, playTime = 0),
+            dao.insertEvent(
+                com.tuneplayer.app.data.db.EventEntity(songId = track.id, timestamp = now, playTime = 0),
             )
             val today = java.time.LocalDate.now()
-            app.database.dao().incrementPlayCount(id, today.year, today.monthValue)
+            dao.incrementPlayCount(track.id, today.year, today.monthValue)
         }.onFailure { LogCatcher.e(TAG, "recordHistory db write failed", it) }
     }
     // Cheap: history is capped at 100 ids, and the tab must not go stale.
@@ -465,7 +469,7 @@ internal fun TunePlayerViewModel.syncQueueIndexFromPlayer() {
         val track = uiState.playbackQueue[index]
         uiState = uiState.copy(queueIndex = index, currentTrack = track, audioInfo = null)
         clearLyricsState()
-        recordHistory(track.id)
+        recordHistory(track)
         prefetchLyrics(track)
         publishWidgetState()
     }
