@@ -62,7 +62,6 @@ import androidx.media3.common.Player
 import com.tuneplayer.app.R
 import com.tuneplayer.app.data.model.AudioInfo
 import com.tuneplayer.app.data.model.Track
-import androidx.compose.ui.graphics.Color
 import com.tuneplayer.app.ui.theme.rememberArtworkPalette
 import com.tuneplayer.app.ui.haptics.Haptic
 import com.tuneplayer.app.ui.haptics.rememberHaptics
@@ -137,7 +136,7 @@ internal fun NowPlayingSheet(
                         Brush.verticalGradient(
                             colors = listOf(
                                 topColor,
-                                lerp(topColor, surface, 0.55f),
+                                lerp(topColor, MaterialTheme.colorScheme.surface, 0.55f),
                                 bottomColor,
                             ),
                             startY = 0f,
