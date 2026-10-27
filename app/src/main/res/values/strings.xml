@@ -112,6 +112,8 @@
     <string name="stats_total_plays">Total plays</string>
     <string name="stats_distinct_tracks">Tracks played</string>
     <string name="stats_top_tracks">Most played</string>
+    <string name="stats_listening_time">Listening time</string>
+    <string name="stats_hours">%1$d h %2$d m</string>
     <string name="stats_empty">No listening data yet.</string>
     <string name="stats_empty_hint">Play a track and it will appear here.</string>
     <string name="library_group_songs">Songs</string>

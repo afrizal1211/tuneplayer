@@ -149,12 +149,21 @@ internal fun TunePlayerViewModel.playPlaylist(playlist: PlaylistEntity, startInd
 }
 
 internal fun TunePlayerViewModel.topTracks(limit: Int = 20): List<Track> {
-    // Kept on the legacy store until the stats screen moves to Room flows.
     val known = (uiState.localTracks + uiState.downloadedTracks + uiState.searchResults)
         .associateBy { it.id }
-    return playStatsStore.topIds(limit).mapNotNull { known[it] }
+    return runCatching {
+        kotlinx.coroutines.runBlocking {
+            app.database.dao().topSongIds(limit)
+        }
+    }.getOrNull()?.mapNotNull { known[it] } ?: emptyList()
 }
 
-internal fun TunePlayerViewModel.totalPlays(): Int = playStatsStore.totalPlays()
+internal fun TunePlayerViewModel.totalPlays(): Int = runCatching {
+    kotlinx.coroutines.runBlocking { app.database.dao().totalPlays() }
+}.getOrDefault(0)
 
-internal fun TunePlayerViewModel.distinctTracks(): Int = playStatsStore.distinctTracks()
+internal fun TunePlayerViewModel.distinctTracks(): Int = runCatching {
+    kotlinx.coroutines.runBlocking {
+        app.database.dao().allPlayCounts()
+    }?.distinctBy { it.songId }?.size ?: 0
+}.getOrDefault(0)
