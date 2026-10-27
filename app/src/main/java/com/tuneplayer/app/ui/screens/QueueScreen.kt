@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -29,6 +30,7 @@ import androidx.compose.material.icons.filled.QueueMusic
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -38,8 +40,12 @@ import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberSwipeToDismissBoxState
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -58,6 +64,7 @@ import com.tuneplayer.app.ui.util.formatDuration
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun QueueScreen(
     queue: List<Track>,
@@ -107,27 +114,30 @@ internal fun QueueScreen(
             }
         }
     val effectiveListState = listState ?: rememberLazyListState()
-        LazyColumn(
-            state = effectiveListState,
-            modifier = Modifier.fillMaxSize().fadingEdge(bottom = 12.dp),
-            contentPadding = PaddingValues(bottom = 12.dp),
-        ) {
-            // Keyed by position, not id: the radio seed allows the same track
-            // twice (per-artist cap of 2), and Compose throws on a repeated key.
-            itemsIndexed(items = queue, key = { index, _ -> index }) { index, track ->
-                QueueRow(
-                    track = track,
-                    isPlaying = index == currentIndex,
-                    canMoveUp = index > 0,
-                    canMoveDown = index < queue.lastIndex,
-                    onPlay = { onPlay(index) },
-                    onRemove = { onRemove(index) },
-                    onMoveUp = { onMove(index, index - 1) },
-                    onMoveDown = { onMove(index, index + 1) },
-                )
-                HorizontalDivider(modifier = Modifier.padding(start = 72.dp))
-            }
+    LazyColumn(
+        state = effectiveListState,
+        modifier = Modifier
+            .fillMaxSize()
+            .fadingEdge(bottom = 12.dp),
+        contentPadding = PaddingValues(bottom = 12.dp),
+    ) {
+        // Keyed by position, not id: the radio seed allows the same track
+        // twice (per-artist cap of 2), and Compose throws on a repeated key.
+        itemsIndexed(items = queue, key = { index, _ -> index }) { index, track ->
+            QueueRow(
+                track = track,
+                isPlaying = index == currentIndex,
+                canMoveUp = index > 0,
+                canMoveDown = index < queue.lastIndex,
+                onPlay = { onPlay(index) },
+                onRemove = { onRemove(index) },
+                onMoveUp = { onMove(index, index - 1) },
+                onMoveDown = { onMove(index, index + 1) },
+                onReorder = { deltaRows -> onMove(index, (index + deltaRows).coerceIn(0, queue.lastIndex)) },
+            )
+            HorizontalDivider(modifier = Modifier.padding(start = 72.dp))
         }
+    }
     }
 
     if (confirmClear) {
@@ -164,6 +174,7 @@ internal fun QueueRow(
     onRemove: () -> Unit,
     onMoveUp: () -> Unit,
     onMoveDown: () -> Unit,
+    onReorder: (Int) -> Unit,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     var dismissed by remember { mutableStateOf(false) }
@@ -211,6 +222,25 @@ internal fun QueueRow(
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        val dragAccum = remember { mutableFloatStateOf(0f) }
+        Icon(
+            imageVector = Icons.Default.DragHandle,
+            contentDescription = stringResource(R.string.action_reorder),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+            modifier = Modifier
+                .draggable(
+                    orientation = Orientation.Vertical,
+                    state = rememberDraggableState { delta ->
+                        dragAccum.floatValue += delta
+                        val rowHeight = 64f
+                        if (kotlin.math.abs(dragAccum.floatValue) >= rowHeight) {
+                            val steps = (dragAccum.floatValue / rowHeight).toInt()
+                            onReorder(steps)
+                            dragAccum.floatValue -= steps * rowHeight
+                        }
+                    },
+                ),
+        )
         Artwork(track = track, size = 48)
         Spacer(Modifier.width(12.dp))
         Column(

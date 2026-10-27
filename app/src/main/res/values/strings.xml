@@ -32,6 +32,7 @@
     <string name="action_move_up">Move up</string>
     <string name="action_move_down">Move down</string>
     <string name="action_remove">Remove from queue</string>
+    <string name="action_reorder">Drag to reorder</string>
     <string name="action_clear">Clear</string>
     <string name="action_grant_access">Grant access</string>
     <string name="action_cancel_timer">Cancel timer</string>
