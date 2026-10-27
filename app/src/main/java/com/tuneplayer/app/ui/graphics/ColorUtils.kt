@@ -87,7 +87,7 @@ object ColorUtils {
             }
             3 -> {
                 r = (255 * m).roundToInt()
-                g = (255 * (c + m)).roundToInt()
+                g = (255 * (x + m)).roundToInt()
                 b = (255 * (c + m)).roundToInt()
             }
             4 -> {
