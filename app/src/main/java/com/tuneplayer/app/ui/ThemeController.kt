@@ -20,6 +20,10 @@ object ThemeController {
     var pureBlack by mutableStateOf(false)
         private set
 
+    /** Manual accent override (#RRGGBB), null = follow theme/default. */
+    var accent: String? by mutableStateOf(null)
+        private set
+
     fun set(theme: com.tuneplayer.app.data.prefs.AppTheme) {
         this.theme = theme
     }
@@ -30,5 +34,9 @@ object ThemeController {
 
     fun updatePureBlack(enabled: Boolean) {
         pureBlack = enabled
+    }
+
+    fun updateAccent(value: String?) {
+        accent = value
     }
 }

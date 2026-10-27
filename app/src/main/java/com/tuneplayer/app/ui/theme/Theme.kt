@@ -1,5 +1,6 @@
 package com.tuneplayer.app.ui.theme
 
+import android.graphics.Color as AndroidColor
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
@@ -52,7 +53,7 @@ fun TunePlayerTheme(content: @Composable () -> Unit) {
     val context = LocalContext.current
     val dynamicAvailable = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
 
-    val colorScheme = when {
+    val baseScheme = when {
         // Pure black wins over dynamic color: asking for OLED black and
         // getting a tinted near-black defeats the point.
         darkTheme && ThemeController.pureBlack -> PureBlackColors
@@ -64,8 +65,31 @@ fun TunePlayerTheme(content: @Composable () -> Unit) {
         else -> LightColors
     }
 
+    // Manual accent override: repaint primary + derived roles from the hex.
+    val colorScheme = ThemeController.accent?.let { hex ->
+        runCatching { Color(AndroidColor.parseColor(hex)) }
+            .getOrNull()
+            ?.let { accent ->
+                baseScheme.copy(
+                    primary = accent,
+                    secondary = accent.copy(alpha = 0.7f),
+                    tertiary = accent.copy(alpha = 0.5f),
+                    primaryContainer = accent.copy(alpha = 0.18f),
+                    onPrimary = if (accentLuminance(accent) > 0.5f) Color.Black else Color.White,
+                )
+            }
+    } ?: baseScheme
+
     MaterialTheme(
         colorScheme = colorScheme,
         content = content,
     )
+}
+
+/** Relative luminance of a color, 0 (black) to 1 (white). */
+private fun accentLuminance(color: Color): Float {
+    val r = color.red * 0.2126f
+    val g = color.green * 0.7152f
+    val b = color.blue * 0.0722f
+    return r + g + b
 }

@@ -100,6 +100,7 @@ data class TunePlayerUiState(
     val gridLayout: Boolean = false,
     val dynamicColor: Boolean = true,
     val pureBlack: Boolean = false,
+    val accent: String? = null,
     val searchHistory: List<String> = emptyList(),
     val historyTracks: List<Track> = emptyList(),
     val playlists: List<PlaylistEntity> = emptyList(),
@@ -202,6 +203,7 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
             gridLayout = app.settingsStore.gridLayout,
             dynamicColor = app.settingsStore.dynamicColor,
             pureBlack = app.settingsStore.pureBlack,
+            accent = app.settingsStore.accentColor,
             searchHistory = app.settingsStore.searchHistory,
             playlists = emptyList(), // loaded async by refreshPlaylists()
             playlistTrackIds = emptyMap(),

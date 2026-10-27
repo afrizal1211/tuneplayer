@@ -42,6 +42,7 @@ class MainActivity : ComponentActivity() {
         ThemeController.set(settings.theme)
         ThemeController.updateDynamicColor(settings.dynamicColor)
         ThemeController.updatePureBlack(settings.pureBlack)
+        ThemeController.updateAccent(settings.accentColor)
         setContent {
             TunePlayerTheme {
                 TunePlayerScreen(initialRoute = initialRoute.value)
