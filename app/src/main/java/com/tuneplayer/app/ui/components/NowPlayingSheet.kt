@@ -48,7 +48,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -59,6 +61,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.media3.common.Player
+import coil3.compose.AsyncImage
 import com.tuneplayer.app.R
 import com.tuneplayer.app.data.model.AudioInfo
 import com.tuneplayer.app.data.model.Track
@@ -128,7 +131,18 @@ internal fun NowPlayingSheet(
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
     ) {
         Box(modifier = Modifier.fillMaxWidth()) {
-            // Artwork-derived gradient, softly blended into the sheet surface.
+            // Blurred artwork as a frosted backdrop, then a palette-tinted
+            // gradient over it so the sheet reads as glass over the sleeve.
+            if (track.artworkUri != null) {
+                AsyncImage(
+                    model = track.artworkUri,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .matchParentSize()
+                        .blur(60.dp),
+                )
+            }
             Box(
                 modifier = Modifier
                     .matchParentSize()
