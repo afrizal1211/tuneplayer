@@ -9,6 +9,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import com.tuneplayer.app.ui.graphics.Swatch
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -93,7 +95,7 @@ fun rememberArtworkPalette(
         val result = runCatching {
             SingletonImageLoader.get(context).execute(request)
         }.getOrNull() as? SuccessResult ?: return@LaunchedEffect
-        val bitmap = result.image.toImageBitmap()
+        val bitmap = runCatching { result.image.toImageBitmap() }.getOrNull() ?: return@LaunchedEffect
         val found = withContext(Dispatchers.Default) { seedOf(bitmap) } ?: return@LaunchedEffect
         seedCache[imageUrl] = found
         seed = found
@@ -158,32 +160,21 @@ private data class Seed(
 )
 
 private fun seedOf(bitmap: ImageBitmap): Seed? {
-    fun swatches(clearFilters: Boolean) =
-        paletteSwatches(bitmap, SWATCH_COUNT, clearFilters)
-
-    // The default filter deliberately throws away near-black and near-white.
-    // That is useful while looking for an accent, but it is the wrong answer
-    // to "what colour is this page mostly made of?" A dark photograph would
-    // otherwise be reduced to whatever warm face or tiny coloured detail
-    // survived the filter, and a monochrome sleeve to an anti-aliased fringe.
-    // Both cases used to turn into the same maroon page.
-    val all = swatches(clearFilters = true)
+    val decoded = runCatching { paletteSwatches(bitmap, SWATCH_COUNT, true) }.getOrNull()
+    val all = decoded ?: return null
     if (all.isEmpty()) return null
-    val accentCandidates = swatches(clearFilters = false).ifEmpty { all }
+    val accentCandidates = runCatching { paletteSwatches(bitmap, SWATCH_COUNT, false) }.getOrNull()?.ifEmpty { all } ?: all
 
-    val dominant = all.maxBy { it.population }
-    // The accent has to earn its place twice over: a colour nobody sees enough
-    // of reads as arbitrary, and a grey one isn't an accent at all. Scoring on
-    // saturation against the *square root* of population is what stops a sleeve
-    // that is four-fifths black sky from accenting in black.
-    val vibrant = accentCandidates.maxBy { swatch ->
+    val dominant = all.maxBy { it.population } ?: return null
+    val vibrant: Swatch? = accentCandidates.maxBy { swatch: Swatch ->
         val hsl = FloatArray(3).also { ColorUtils.colorToHSL(swatch.rgb, it) }
         hsl[1] * sqrt(swatch.population.toFloat())
     }
+    val edgeColor = runCatching { bitmap.bottomEdgeColor() }.getOrNull() ?: Color(0xFF000000)
     return Seed(
         dominant = Color(dominant.rgb),
-        vibrant = Color(vibrant.rgb),
-        edge = bitmap.bottomEdgeColor(),
+        vibrant = vibrant?.let { s: Swatch -> Color(s.rgb) } ?: Color(dominant.rgb),
+        edge = edgeColor,
     )
 }
 
