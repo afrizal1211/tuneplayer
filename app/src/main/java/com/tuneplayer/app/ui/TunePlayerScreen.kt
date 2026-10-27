@@ -27,6 +27,8 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.LibraryMusic
 import androidx.compose.material.icons.outlined.PlaylistPlay
@@ -77,6 +79,7 @@ import com.tuneplayer.app.ui.components.MiniPlayer
 import com.tuneplayer.app.ui.components.NowPlayingSheet
 import com.tuneplayer.app.ui.components.SleepTimerDialog
 import com.tuneplayer.app.ui.components.TrackList
+import com.tuneplayer.app.ui.screens.BrowseScreen
 import com.tuneplayer.app.ui.screens.DownloadsScreen
 import com.tuneplayer.app.ui.Screens
 import com.tuneplayer.app.ui.screens.FavoritesScreen
@@ -247,6 +250,7 @@ fun TunePlayerScreen(
                     )
                 }
                 NavigationBar {
+                    @Composable
                     fun navItem(
                         screen: Screens,
                         labelRes: Int,
