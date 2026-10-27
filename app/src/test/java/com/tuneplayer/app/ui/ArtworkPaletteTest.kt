@@ -23,7 +23,7 @@ class ArtworkPaletteTest {
 
     @Test
     fun hslRoundTripKeepsTheColourWithinQuantisation() {
-        val origins = listOf(0xFF3A61D4.toInt(), 0xFFD43A3A, 0xFF3AD47F, 0xFF808080, 0xFF101010, -1)
+        val origins = listOf(0xFF3A61D4.toInt(), 0xFFD43A3A.toInt(), 0xFF3AD47F.toInt(), 0xFF808080.toInt(), 0xFF101010.toInt(), -1)
         for (origin in origins) {
             val out = FloatArray(3).also { ColorUtils.colorToHSL(origin, it) }
             assertEquals(origin, ColorUtils.HSLToColor(out))
