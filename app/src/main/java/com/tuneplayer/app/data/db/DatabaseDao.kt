@@ -40,7 +40,7 @@ interface DatabaseDao {
     suspend fun setLiked(id: String, liked: Boolean)
 
     @Query("UPDATE song SET playTime = playTime + :deltaMs WHERE id = :id")
-    suspend fun addPlayTime(id: String, playTime: Long)
+    suspend fun addPlayTime(id: String, deltaMs: Long)
 
     // --- Playlists ---
 

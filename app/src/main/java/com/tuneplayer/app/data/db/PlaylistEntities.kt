@@ -30,7 +30,6 @@ data class PlaylistEntity(
             onDelete = ForeignKey.CASCADE,
         ),
     ],
-    indices = [Index("playlistId"), Index("songId")],
 )
 data class PlaylistSongMap(
     @PrimaryKey(autoGenerate = true) val rowId: Long = 0,
