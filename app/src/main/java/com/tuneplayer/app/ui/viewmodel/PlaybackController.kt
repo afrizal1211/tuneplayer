@@ -390,6 +390,17 @@ internal fun TunePlayerViewModel.cacheResolvedUri(trackId: String, uri: String) 
 internal fun TunePlayerViewModel.recordHistory(id: String) {
     favoriteStore.recordPlay(id)
     playStatsStore.record(id)
+    // Room mirror: events log + month-bucketed play counts.
+    viewModelScope.launch {
+        runCatching {
+            val now = System.currentTimeMillis()
+            app.database.dao().insertEvent(
+                com.tuneplayer.app.data.db.EventEntity(songId = id, timestamp = now, playTime = 0),
+            )
+            val today = java.time.LocalDate.now()
+            app.database.dao().incrementPlayCount(id, today.year, today.monthValue)
+        }.onFailure { LogCatcher.e(TAG, "recordHistory db write failed", it) }
+    }
     // Cheap: history is capped at 100 ids, and the tab must not go stale.
     refreshHistoryTracks()
 }

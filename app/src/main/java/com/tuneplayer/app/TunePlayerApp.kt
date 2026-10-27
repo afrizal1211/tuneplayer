@@ -14,6 +14,7 @@ import com.tuneplayer.app.data.youtube.YouTubeMusicRepository
 import com.tuneplayer.app.data.prefs.PlayStatsStore
 import com.tuneplayer.app.data.prefs.PlaylistStore
 import com.tuneplayer.app.data.prefs.QueueStore
+import com.tuneplayer.app.data.db.TunePlayerDatabase
 import com.tuneplayer.app.log.LogCatcher
 
 class TunePlayerApp : Application() {
@@ -26,6 +27,16 @@ class TunePlayerApp : Application() {
     override fun onCreate() {
         super.onCreate()
         syncDiscordRpc()
+        // Import legacy JSON stores into Room once, before any UI reads them.
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+            com.tuneplayer.app.data.db.LegacyJsonMigrator.migrateIfNeeded(
+                context = this@TunePlayerApp,
+                database = database,
+                playlists = playlistStore,
+                favorites = favoriteStore,
+                stats = playStatsStore,
+            )
+        }
     }
 
     val localMusicRepository: LocalMusicRepository by lazy {
@@ -97,5 +108,9 @@ class TunePlayerApp : Application() {
 
     val queueStore: QueueStore by lazy {
         QueueStore(this)
+    }
+
+    val database: TunePlayerDatabase by lazy {
+        TunePlayerDatabase.get(this)
     }
 }

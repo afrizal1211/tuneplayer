@@ -111,7 +111,8 @@ internal fun TunePlayerViewModel.reloadFromStores() {
         dynamicColor = settings.dynamicColor,
         pureBlack = settings.pureBlack,
         searchHistory = settings.searchHistory,
-        playlists = playlistStore.all(),
+        playlists = emptyList(),
+        playlistTrackIds = emptyMap(),
         youtubeSignedIn = settings.youtubeCookie != null,
         youtubeAudioQuality = settings.youtubeAudioQuality,
         lyricsOffsetMs = settings.lyricsOffsetMs,
@@ -121,6 +122,7 @@ internal fun TunePlayerViewModel.reloadFromStores() {
     )
     app.syncDiscordRpc()
     refreshHistoryTracks()
+    refreshPlaylists()
     LogCatcher.d(TAG, "reloaded stores after restore")
 }
 

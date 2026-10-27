@@ -36,8 +36,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.tuneplayer.app.R
+import com.tuneplayer.app.data.db.PlaylistEntity
 import com.tuneplayer.app.data.model.Track
-import com.tuneplayer.app.data.prefs.PlaylistStore
 import com.tuneplayer.app.ui.components.EmptyState
 import com.tuneplayer.app.ui.components.TrackList
 import com.tuneplayer.app.ui.fadingEdge
@@ -47,15 +47,15 @@ import com.tuneplayer.app.ui.components.TrackRow
 
 @Composable
 internal fun PlaylistsScreen(
-    playlists: List<PlaylistStore.Playlist>,
-    tracksFor: (PlaylistStore.Playlist) -> List<Track>,
+    playlists: List<PlaylistEntity>,
+    tracksFor: (PlaylistEntity) -> List<Track>,
     favoriteIds: Set<String>,
     onCreate: (String) -> Unit,
     onDelete: (String) -> Unit,
     onRename: (String, String) -> Unit,
     onAddQueue: (String) -> Unit,
     onRemoveTrack: (String, String) -> Unit,
-    onPlay: (PlaylistStore.Playlist, Int) -> Unit,
+    onPlay: (PlaylistEntity, Int) -> Unit,
     onPlayNext: (Track) -> Unit,
     onToggleFavorite: (Track) -> Unit,
     onShare: (Track) -> Unit,

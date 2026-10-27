@@ -22,7 +22,7 @@ import androidx.media3.session.SessionToken
 import com.tuneplayer.app.TunePlayerApp
 import com.tuneplayer.app.log.LogCatcher
 import com.tuneplayer.app.data.prefs.PlayStatsStore
-import com.tuneplayer.app.data.prefs.PlaylistStore
+import com.tuneplayer.app.data.db.PlaylistEntity
 import com.tuneplayer.app.R
 import com.tuneplayer.app.data.model.AudioInfo
 import com.tuneplayer.app.data.model.Track
@@ -101,7 +101,9 @@ data class TunePlayerUiState(
     val pureBlack: Boolean = false,
     val searchHistory: List<String> = emptyList(),
     val historyTracks: List<Track> = emptyList(),
-    val playlists: List<PlaylistStore.Playlist> = emptyList(),
+    val playlists: List<PlaylistEntity> = emptyList(),
+    /** playlist id -> ordered song ids, populated from Room when tab opens. */
+    val playlistTrackIds: Map<String, List<String>> = emptyMap(),
     val playbackQueue: List<Track> = emptyList(),
     val queueIndex: Int = 0,
     val theme: AppTheme = AppTheme.System,
@@ -154,7 +156,6 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
     internal var searchJob: Job? = null
     internal var searchSuggestionsJob: Job? = null
     internal val favoriteStore = app.favoriteStore
-    internal val playlistStore = app.playlistStore
     internal val queueStore = app.queueStore
     internal val playStatsStore = app.playStatsStore
     internal val resolvedUris = LinkedHashMap<String, String>()
@@ -201,7 +202,8 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
             dynamicColor = app.settingsStore.dynamicColor,
             pureBlack = app.settingsStore.pureBlack,
             searchHistory = app.settingsStore.searchHistory,
-            playlists = playlistStore.all(),
+            playlists = emptyList(), // loaded async by refreshPlaylists()
+            playlistTrackIds = emptyMap(),
             youtubeSignedIn = app.settingsStore.youtubeCookie != null,
             youtubeAudioQuality = app.settingsStore.youtubeAudioQuality,
             lyricsOffsetMs = app.settingsStore.lyricsOffsetMs,
@@ -213,8 +215,10 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
             discordShowWhenPaused = app.settingsStore.discordShowWhenPaused,
         )
         knownDownloadErrors = offlineState.errors.keys
+        refreshPlaylists()
         viewModelScope.launch {
             app.offlineDownloadManager.state.collect { downloads ->
+                val newErrors = downloads.errors.keys - knownDownloadErrors
                 val newErrors = downloads.errors.keys - knownDownloadErrors
                 knownDownloadErrors = downloads.errors.keys
                 uiState = uiState.copy(
