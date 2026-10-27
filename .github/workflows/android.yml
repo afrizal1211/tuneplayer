@@ -165,5 +165,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          APK=$(ls app/build/outputs/apk/release/*.apk | head -n1)
+          APK=$(find app/build/outputs/apk -name '*.apk' | head -n1)
+          if [ -z "$APK" ]; then
+            echo "no release APK found"
+            exit 1
+          fi
           gh release upload "${{ github.ref_name }}" "$APK" --clobber
