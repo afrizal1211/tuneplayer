@@ -1,6 +1,9 @@
 package com.tuneplayer.app
 
 import android.app.Application
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import com.tuneplayer.app.data.discord.DiscordRpcClient
 import com.tuneplayer.app.data.downloads.OfflineDownloadManager
 import com.tuneplayer.app.data.local.LocalMusicRepository
@@ -28,7 +31,7 @@ class TunePlayerApp : Application() {
         super.onCreate()
         syncDiscordRpc()
         // Import legacy JSON stores into Room once, before any UI reads them.
-        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+        CoroutineScope(Dispatchers.IO).launch {
             com.tuneplayer.app.data.db.LegacyJsonMigrator.migrateIfNeeded(
                 context = this@TunePlayerApp,
                 database = database,

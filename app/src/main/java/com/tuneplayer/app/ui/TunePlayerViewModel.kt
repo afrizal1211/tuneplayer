@@ -219,7 +219,6 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
         viewModelScope.launch {
             app.offlineDownloadManager.state.collect { downloads ->
                 val newErrors = downloads.errors.keys - knownDownloadErrors
-                val newErrors = downloads.errors.keys - knownDownloadErrors
                 knownDownloadErrors = downloads.errors.keys
                 uiState = uiState.copy(
                     downloadedTracks = app.offlineDownloadManager.downloadedTracks(),
