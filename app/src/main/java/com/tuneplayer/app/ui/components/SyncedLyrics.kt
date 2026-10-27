@@ -35,6 +35,7 @@ internal fun SyncedLyrics(
     activeIndex: Int,
     activeWordIndex: Int,
     activeRows: List<Int> = emptyList(),
+    modifier: Modifier = Modifier,
 ) {
     // The uppermost still-sung row owns the scroll anchor until it ends, even
     // as later rows begin their own highlights.
@@ -48,7 +49,7 @@ internal fun SyncedLyrics(
     val litRows = remember(activeRows) { activeRows.toHashSet() }
     LazyColumn(
         state = listState,
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .heightIn(min = 160.dp, max = 360.dp),
     ) {
