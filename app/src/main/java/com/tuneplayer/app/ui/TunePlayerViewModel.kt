@@ -77,6 +77,7 @@ data class TunePlayerUiState(
     val searchRecommendations: List<Track> = emptyList(),
     val isLoadingSuggestions: Boolean = false,
     val homeRecommendations: List<Track> = emptyList(),
+    val homeShelves: List<com.tuneplayer.app.data.youtube.YouTubeHomeShelf> = emptyList(),
     val isLoadingHomeRecommendations: Boolean = false,
     val currentTrack: Track? = null,
     /** Codec/bitrate of the playing stream, when the player or resolver knows it. */

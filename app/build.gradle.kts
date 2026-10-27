@@ -129,6 +129,7 @@ dependencies {
     implementation(libs.haze.materials)
 
     implementation(libs.innertubex)
+    implementation(libs.navigation)
 
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)

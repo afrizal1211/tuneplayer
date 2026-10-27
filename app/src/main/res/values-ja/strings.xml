@@ -5,9 +5,14 @@
 
     <string name="tab_library">ライブラリ</string>
     <string name="tab_youtube">YouTube</string>
+    <string name="tab_browse">ブラウズ</string>
+    <string name="tab_more">その他</string>
     <string name="tab_queue">キュー</string>
     <string name="tab_liked">お気に入り</string>
     <string name="tab_settings">設定</string>
+    <string name="browse_empty">まだ何もありません</string>
+    <string name="browse_empty_hint">YouTube Musicにサインインすると、おすすめがここに表示されます。</string>
+    <string name="browse_for_you">あなたへのおすすめ</string>
 
     <string name="search_hint">YouTube Musicを検索</string>
     <string name="search_empty">曲、アルバム、アーティストを検索</string>
@@ -95,7 +100,6 @@
     <string name="settings_appearance">外観</string>
     <string name="settings_dynamic_color">ダイナミックカラー（Android 12以降）</string>
     <string name="settings_pure_black">純黒テーマ</string>
-    <string name="tab_more">その他</string>
     <string name="tab_stats">統計</string>
     <string name="stats_total_plays">総再生回数</string>
     <string name="stats_distinct_tracks">再生した曲数</string>
