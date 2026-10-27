@@ -34,9 +34,12 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -45,6 +48,8 @@ import com.tuneplayer.app.R
 import com.tuneplayer.app.data.model.Track
 import com.tuneplayer.app.ui.haptics.Haptic
 import com.tuneplayer.app.ui.haptics.rememberHaptics
+import coil3.compose.AsyncImage
+import coil3.request.ImageRequest
 import androidx.compose.runtime.getValue
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -78,6 +83,7 @@ internal fun MiniPlayer(
     )
     val haptics = rememberHaptics()
 
+    val surface = MaterialTheme.colorScheme.surface
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -87,8 +93,34 @@ internal fun MiniPlayer(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(20.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant),
+                .background(surface.copy(alpha = 0.85f)),
         ) {
+            // Blurred artwork backdrop
+            if (track.artworkUri != null) {
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(track.artworkUri)
+                        .size(256)
+                        .build(),
+                    contentDescription = null,
+                    modifier = Modifier
+                        .matchParentSize()
+                        .blur(28.dp),
+                    contentScale = ContentScale.Crop,
+                )
+            }
+            // Gradient scrim for text readability
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .background(
+                        Brush.horizontalGradient(
+                            0f to surface.copy(alpha = 0.7f),
+                            0.5f to surface.copy(alpha = 0.92f),
+                            1f to surface.copy(alpha = 0.7f),
+                        ),
+                    ),
+            )
             Column {
                 LinearProgressIndicator(
                     progress = { animatedProgress },
