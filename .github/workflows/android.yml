@@ -161,13 +161,12 @@ jobs:
           TUNEPLAYER_KEY_PASSWORD: ${{ secrets.TUNEPLAYER_KEY_PASSWORD }}
         run: ./gradlew :app:assembleRelease --stacktrace
 
-      - name: Upload release APK to GitHub Release
+      - name: Create GitHub Release and upload APK
+        uses: softprops/action-gh-release@v1
         env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          APK=$(find app/build/outputs/apk -name '*.apk' | head -n1)
-          if [ -z "$APK" ]; then
-            echo "no release APK found"
-            exit 1
-          fi
-          gh release upload "${{ github.ref_name }}" "$APK" --clobber
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: TunePlayer ${{ github.ref_name }}
+          generate_release_notes: true
+          files: app/build/outputs/apk/**/*.apk
