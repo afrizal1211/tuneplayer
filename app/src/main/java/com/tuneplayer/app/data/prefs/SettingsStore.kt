@@ -83,6 +83,13 @@ class SettingsStore(context: Context) {
             prefs.edit().putBoolean(KEY_PURE_BLACK, value).apply()
         }
 
+    /** Manual accent override as a #RRGGBB string, or null for default. */
+    var accentColor: String?
+        get() = prefs.getString(KEY_ACCENT, null).takeIf { it?.matches(Regex("#[0-9A-Fa-f]{6}")) == true }
+        set(value) {
+            prefs.edit().putString(KEY_ACCENT, value).apply()
+        }
+
     var gridLayout: Boolean
         get() = prefs.getBoolean(KEY_GRID_LAYOUT, false)
         set(value) {
@@ -267,6 +274,7 @@ class SettingsStore(context: Context) {
         const val KEY_EQ_PRESET = "eq_preset"
         const val KEY_DYNAMIC_COLOR = "dynamic_color"
         const val KEY_PURE_BLACK = "pure_black"
+        const val KEY_ACCENT = "accent_color"
         const val KEY_SKIP_SILENCE = "skip_silence"
         const val KEY_CROSSFADE_ENABLED = "crossfade_enabled"
         const val KEY_CROSSFADE_SECONDS = "crossfade_seconds"

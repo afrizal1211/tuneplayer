@@ -104,6 +104,8 @@
     <string name="settings_appearance">Appearance</string>
     <string name="settings_dynamic_color">Dynamic color (Android 12+)</string>
     <string name="settings_pure_black">Pure black</string>
+    <string name="settings_accent">Accent color</string>
+    <string name="settings_accent_default">Default</string>
     <string name="tab_more">More</string>
     <string name="tab_stats">Stats</string>
     <string name="stats_total_plays">Total plays</string>

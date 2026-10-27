@@ -2,8 +2,13 @@ package com.tuneplayer.app.ui
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -15,7 +20,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.graphics.Color
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.AlertDialog
@@ -61,6 +68,8 @@ fun SettingsScreen(
     hapticsEnabled: Boolean,
     dynamicColor: Boolean,
     pureBlack: Boolean,
+    accent: String?,
+    onAccentChange: (String?) -> Unit,
     eqBands: List<Int>,
     eqBandFreqs: List<Int>,
     eqBandRange: IntRange?,
@@ -171,6 +180,48 @@ fun SettingsScreen(
             checked = pureBlack,
             onCheckedChange = onPureBlackChange,
         )
+        SettingsSectionTitle(stringResource(R.string.settings_accent))
+        val accents = listOf(
+            null to stringResource(R.string.settings_accent_default),
+            "#6750A4" to "Purple",
+            "#1E88E5" to "Blue",
+            "#E53935" to "Red",
+            "#43A047" to "Green",
+            "#FB8C00" to "Orange",
+            "#8E24AA" to "Violet",
+            "#00897B" to "Teal",
+        )
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            accents.forEach { (hex, name) ->
+                val selected = accent == hex
+                Row(
+                    modifier = Modifier
+                        .border(
+                            width = if (selected) 2.dp else 0.dp,
+                            color = MaterialTheme.colorScheme.primary,
+                            shape = RoundedCornerShape(20.dp),
+                        )
+                        .clickable { onAccentChange(hex) }
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (hex != null) {
+                        Box(
+                            modifier = Modifier
+                                .size(16.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color(android.graphics.Color.parseColor(hex))),
+                        )
+                        Spacer(Modifier.width(8.dp))
+                    }
+                    Text(name, style = MaterialTheme.typography.bodyMedium)
+                }
+            }
+        }
 
         Spacer(Modifier.height(24.dp))
         SettingsSectionTitle(stringResource(R.string.settings_youtube_account))

@@ -67,6 +67,11 @@ internal fun TunePlayerViewModel.setPureBlack(enabled: Boolean) {
     uiState = uiState.copy(pureBlack = enabled)
 }
 
+internal fun TunePlayerViewModel.setAccent(value: String?) {
+    app.settingsStore.accentColor = value
+    ThemeController.updateAccent(value)
+}
+
 /**
  * Re-reads every store after a restore.
  *

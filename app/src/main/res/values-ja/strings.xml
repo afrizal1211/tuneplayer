@@ -100,6 +100,8 @@
     <string name="settings_appearance">外観</string>
     <string name="settings_dynamic_color">ダイナミックカラー（Android 12以降）</string>
     <string name="settings_pure_black">純黒テーマ</string>
+    <string name="settings_accent">アクセントカラー</string>
+    <string name="settings_accent_default">デフォルト</string>
     <string name="tab_stats">統計</string>
     <string name="stats_total_plays">総再生回数</string>
     <string name="stats_distinct_tracks">再生した曲数</string>
