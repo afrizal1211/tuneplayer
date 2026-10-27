@@ -435,6 +435,7 @@ fun TunePlayerScreen(
                     onRename = { id, name -> viewModel.renamePlaylist(id, name) },
                     onAddQueue = viewModel::addQueueToPlaylist,
                     onRemoveTrack = { id, trackId -> viewModel.removeFromPlaylist(id, trackId) },
+                    onReorderTrack = viewModel::moveInPlaylist,
                     onPlay = viewModel::playPlaylist,
                     onPlayNext = viewModel::playNext,
                     onToggleFavorite = viewModel::toggleFavorite,

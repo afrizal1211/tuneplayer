@@ -1,6 +1,10 @@
 package com.tuneplayer.app.ui.screens
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -13,8 +17,10 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.PlaylistPlay
@@ -29,8 +35,11 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -39,11 +48,8 @@ import com.tuneplayer.app.R
 import com.tuneplayer.app.data.db.PlaylistEntity
 import com.tuneplayer.app.data.model.Track
 import com.tuneplayer.app.ui.components.EmptyState
-import com.tuneplayer.app.ui.components.TrackList
-import com.tuneplayer.app.ui.fadingEdge
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
 import com.tuneplayer.app.ui.components.TrackRow
+import com.tuneplayer.app.ui.fadingEdge
 
 @Composable
 internal fun PlaylistsScreen(
@@ -55,6 +61,7 @@ internal fun PlaylistsScreen(
     onRename: (String, String) -> Unit,
     onAddQueue: (String) -> Unit,
     onRemoveTrack: (String, String) -> Unit,
+    onReorderTrack: (playlistId: String, fromIndex: Int, toIndex: Int) -> Unit,
     onPlay: (PlaylistEntity, Int) -> Unit,
     onPlayNext: (Track) -> Unit,
     onToggleFavorite: (Track) -> Unit,
@@ -151,7 +158,7 @@ internal fun PlaylistsScreen(
 
     val open = playlists.firstOrNull { it.id == openId }
     if (open != null) {
-        val tracks = tracksFor(open)
+        var tracks by remember(open.id) { mutableStateOf(tracksFor(open)) }
         AlertDialog(
             onDismissRequest = { openId = null },
             title = { Text(open.name) },
@@ -163,24 +170,49 @@ internal fun PlaylistsScreen(
             modifier = Modifier.heightIn(max = 360.dp).fadingEdge(top = 8.dp, bottom = 8.dp),
         ) {
                         itemsIndexed(items = tracks, key = { index, _ -> index }) { index, track ->
-                            TrackRow(
-                                track = track,
-                                isFavorite = track.id in favoriteIds,
-                                onPlay = { onPlay(open, index) },
-                                onPlayNext = { onPlayNext(track) },
-                                onToggleFavorite = { onToggleFavorite(track) },
-                                onShare = { onShare(track) },
-                                trailing = {
-                                    IconButton(onClick = { onRemoveTrack(open.id, track.id) }) {
-                                        Icon(
-                                            Icons.Default.RemoveCircleOutline,
-                                            contentDescription = stringResource(
-                                                R.string.action_remove_from_playlist,
-                                            ),
-                                        )
-                                    }
-                                },
-                            )
+                            val dragAccum = remember { mutableFloatStateOf(0f) }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.DragHandle,
+                                    contentDescription = stringResource(R.string.action_reorder),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                    modifier = Modifier
+                                        .draggable(
+                                            orientation = Orientation.Vertical,
+                                            state = rememberDraggableState { delta ->
+                                                dragAccum.floatValue += delta
+                                                val rowHeight = 64f
+                                                if (kotlin.math.abs(dragAccum.floatValue) >= rowHeight) {
+                                                    val steps = (dragAccum.floatValue / rowHeight).toInt()
+                                                    val to = (index + steps).coerceIn(0, tracks.lastIndex)
+                                                    val newTracks = tracks.toMutableList().apply { add(to, removeAt(index)) }
+                                                    val from = index
+                                                    tracks = newTracks
+                                                    onReorderTrack(open.id, from, to)
+                                                    dragAccum.floatValue -= steps * rowHeight
+                                                }
+                                            },
+                                        ),
+                                )
+                                TrackRow(
+                                    track = track,
+                                    isFavorite = track.id in favoriteIds,
+                                    onPlay = { onPlay(open, index) },
+                                    onPlayNext = { onPlayNext(track) },
+                                    onToggleFavorite = { onToggleFavorite(track) },
+                                    onShare = { onShare(track) },
+                                    trailing = {
+                                        IconButton(onClick = { onRemoveTrack(open.id, track.id) }) {
+                                            Icon(
+                                                Icons.Default.RemoveCircleOutline,
+                                                contentDescription = stringResource(
+                                                    R.string.action_remove_from_playlist,
+                                                ),
+                                            )
+                                        }
+                                    },
+                                )
+                            }
                         }
                     }
                 }
