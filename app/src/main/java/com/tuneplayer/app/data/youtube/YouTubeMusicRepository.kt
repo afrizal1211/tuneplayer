@@ -77,6 +77,12 @@ private data class HomeShelf(
     val tracks: List<Track>,
 )
 
+/** One home-feed carousel, public so the Browse screen can render shelves. */
+data class YouTubeHomeShelf(
+    val title: String,
+    val tracks: List<Track>,
+)
+
 class YouTubeMusicRepository {
 
     companion object {
@@ -260,7 +266,14 @@ class YouTubeMusicRepository {
      * come first. Playlists and artist rows are skipped because only playable
      * tracks can be represented by [Track] here.
      */
-    suspend fun homeRecommendations(limit: Int = 12): List<Track> {
+    suspend fun homeRecommendations(limit: Int = 12): List<Track> =
+        homeShelves().firstOrNull()?.tracks?.distinctBy { it.id }?.take(limit).orEmpty()
+
+    /**
+     * Every home-feed shelf, in YouTube's order, capped at [maxShelves] x
+     * [perShelf]. Mirrors ArchiveTune's HomeScreen carousel structure.
+     */
+    suspend fun homeShelves(maxShelves: Int = 6, perShelf: Int = 12): List<YouTubeHomeShelf> {
         val response = innerTube
             .browse(
                 client = YouTubeClient.WEB_REMIX,
@@ -270,14 +283,11 @@ class YouTubeMusicRepository {
 
         val shelves = mutableListOf<HomeShelf>()
         collectHomeShelves(response, shelves)
-        val candidates = shelves.filterNot { shelf ->
-            HOME_AVOID_MARKERS.any { marker -> marker in shelf.title.lowercase() }
-        }
-        val preferred = candidates.firstOrNull { shelf ->
-            HOME_RECOMMENDATION_MARKERS.any { marker -> marker in shelf.title.lowercase() }
-        } ?: candidates.firstOrNull() ?: shelves.firstOrNull()
-
-        return preferred?.tracks.orEmpty().distinctBy { it.id }.take(limit)
+        return shelves
+            .filterNot { shelf -> HOME_AVOID_MARKERS.any { marker -> marker in shelf.title.lowercase() } }
+            .take(maxShelves)
+            .map { shelf -> YouTubeHomeShelf(title = shelf.title, tracks = shelf.tracks.take(perShelf)) }
+            .filter { it.tracks.isNotEmpty() }
     }
 
     private fun collectHomeShelves(element: JsonElement, output: MutableList<HomeShelf>) {

@@ -7,23 +7,26 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import com.tuneplayer.app.ui.ThemeController
+import com.tuneplayer.app.ui.Screens
 import com.tuneplayer.app.ui.TunePlayerScreen
 import com.tuneplayer.app.ui.theme.TunePlayerTheme
 
 class MainActivity : ComponentActivity() {
 
-    private val initialTab = mutableStateOf(0)
+    /** Deep-link target route, consumed by the screen's initial navigation state. */
+    private val initialRoute = mutableStateOf(Screens.Library.route)
 
     private fun rememberTab(intent: android.content.Intent?) {
-        initialTab.value = tabForIntent(intent)
+        initialRoute.value = routeForIntent(intent)
     }
 
-    private fun tabForIntent(intent: android.content.Intent?): Int =
+
+    private fun routeForIntent(intent: android.content.Intent?): String =
         when (intent?.getStringExtra(EXTRA_OPEN_TAB)) {
-            TAB_YOUTUBE -> TAB_INDEX_YOUTUBE
-            TAB_QUEUE -> TAB_INDEX_QUEUE
-            TAB_LIKED -> TAB_INDEX_LIKED
-            else -> TAB_INDEX_LIBRARY
+            TAB_YOUTUBE -> Screens.Search.route
+            TAB_QUEUE -> Screens.Queue.route
+            TAB_LIKED -> Screens.Liked.route
+            else -> Screens.Library.route
         }
 
     override fun onNewIntent(intent: android.content.Intent) {
@@ -41,8 +44,7 @@ class MainActivity : ComponentActivity() {
         ThemeController.updatePureBlack(settings.pureBlack)
         setContent {
             TunePlayerTheme {
-                val tab by initialTab
-                TunePlayerScreen(initialTab = tab)
+                TunePlayerScreen(initialRoute = initialRoute.value)
             }
         }
     }
@@ -54,9 +56,5 @@ class MainActivity : ComponentActivity() {
         const val TAB_LIKED = "liked"
         const val TAB_LIBRARY = "library"
 
-        const val TAB_INDEX_LIBRARY = 0
-        const val TAB_INDEX_YOUTUBE = 1
-        const val TAB_INDEX_QUEUE = 2
-        const val TAB_INDEX_LIKED = 3
     }
 }

@@ -153,6 +153,7 @@ internal fun TunePlayerViewModel.connectYouTubeAccount(cookie: String) {
         youtubeSignedIn = true,
         error = null,
         homeRecommendations = emptyList(),
+        homeShelves = emptyList(),
     )
     LogCatcher.d(TAG, "YouTube Music account connected")
 }
@@ -168,6 +169,7 @@ internal fun TunePlayerViewModel.disconnectYouTubeAccount() {
     uiState = uiState.copy(
         youtubeSignedIn = false,
         homeRecommendations = emptyList(),
+        homeShelves = emptyList(),
     )
     LogCatcher.d(TAG, "YouTube Music account disconnected")
 }

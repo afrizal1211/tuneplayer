@@ -92,13 +92,15 @@ internal fun TunePlayerViewModel.updateQuery(query: String) {
  * or empty response can be retried by opening or clearing the search tab.
  */
 internal fun TunePlayerViewModel.loadHomeRecommendations() {
-    if (uiState.isLoadingHomeRecommendations || uiState.homeRecommendations.isNotEmpty()) return
+    if (uiState.isLoadingHomeRecommendations || uiState.homeShelves.isNotEmpty()) return
     uiState = uiState.copy(isLoadingHomeRecommendations = true)
     viewModelScope.launch {
         try {
-            val tracks = youTubeRepository.homeRecommendations()
+            val shelves = youTubeRepository.homeShelves()
+            val flat = shelves.firstOrNull()?.tracks.orEmpty()
             uiState = uiState.copy(
-                homeRecommendations = tracks,
+                homeShelves = shelves,
+                homeRecommendations = flat,
                 isLoadingHomeRecommendations = false,
             )
         } catch (cancelled: CancellationException) {

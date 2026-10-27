@@ -6,8 +6,6 @@ import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.Crossfade
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -17,12 +15,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.BarChart
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.PlaylistPlay
@@ -30,6 +25,14 @@ import androidx.compose.material.icons.filled.QueueMusic
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.LibraryMusic
+import androidx.compose.material.icons.outlined.PlaylistPlay
+import androidx.compose.material.icons.outlined.QueueMusic
+import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
@@ -75,6 +78,7 @@ import com.tuneplayer.app.ui.components.NowPlayingSheet
 import com.tuneplayer.app.ui.components.SleepTimerDialog
 import com.tuneplayer.app.ui.components.TrackList
 import com.tuneplayer.app.ui.screens.DownloadsScreen
+import com.tuneplayer.app.ui.Screens
 import com.tuneplayer.app.ui.screens.FavoritesScreen
 import com.tuneplayer.app.ui.screens.HistoryScreen
 import com.tuneplayer.app.ui.screens.LibraryScreen
@@ -101,7 +105,7 @@ import com.tuneplayer.app.ui.util.formatSpeed
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TunePlayerScreen(
-    initialTab: Int = 0,
+    initialRoute: String = Screens.Library.route,
     viewModel: TunePlayerViewModel = viewModel(),
 ) {
     val state = viewModel.uiState
@@ -131,24 +135,18 @@ fun TunePlayerScreen(
         }
     }
 
-    // Tab back stack. Tapping a tab pushes it; back pops to the previous tab
-    // and only exits the activity at the root. Compose Crossfade recreates
-    // each screen on switch, so this also restores which tab you came from.
-    // Stored as a comma-joined string because rememberSaveable's listSaver
-    // infers Saveable from the element type and would not resolve for Int.
-    var backStackCsv by rememberSaveable { mutableStateOf(initialTab.toString()) }
-    val backStack = backStackCsv.split(",").map { it.toInt() }
-    val selectedTab = backStack.last()
-    val selectTab: (Int) -> Unit = { tab ->
-        if (tab != selectedTab) {
-            backStackCsv = (backStack + tab).joinToString(",")
-        }
+    // Route-based navigation matching ArchiveTune's NavHost pattern.
+    // Back stack replaces the old comma-joined int CSV.
+    var backStackRoutes by rememberSaveable { mutableStateOf(listOf(initialRoute)) }
+    val currentRoute = backStackRoutes.lastOrNull() ?: Screens.Library.route
+    val navigateTo: (String) -> Unit = { route ->
+        if (route != currentRoute) backStackRoutes = backStackRoutes + route
     }
-    BackHandler(enabled = backStack.size > 1) {
-        backStackCsv = backStack.dropLast(1).joinToString(",")
+    BackHandler(enabled = backStackRoutes.size > 1) {
+        backStackRoutes = backStackRoutes.dropLast(1)
     }
-    LaunchedEffect(selectedTab) {
-        if (selectedTab == 1) viewModel.loadHomeRecommendations()
+    LaunchedEffect(currentRoute) {
+        if (currentRoute == Screens.Browse.route) viewModel.loadHomeRecommendations()
     }
     var showSleepDialog by rememberSaveable { mutableStateOf(false) }
     var showLyricsSheet by rememberSaveable { mutableStateOf(false) }
@@ -156,7 +154,7 @@ fun TunePlayerScreen(
     var showPlayer by rememberSaveable { mutableStateOf(false) }
     var speedMenuOpen by remember { mutableStateOf(false) }
 
-    // Tabs: 0 Library, 1 YouTube, 2 Queue, 3 Liked, 4 History, 5 Playlists, 6 Settings
+    // Tabs: library, browse, search, queue, liked
     val keepScreenOn = state.keepScreenOn
     val activity = context as? android.app.Activity
     DisposableEffect(keepScreenOn) {
@@ -181,24 +179,14 @@ fun TunePlayerScreen(
         LocalRemoveDownload provides viewModel::removeDownload,
     ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val currentScreen = Screens.byRoute(currentRoute) ?: Screens.Library
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
             TopAppBar(
                 title = {
-                    val tabTitle = when (selectedTab) {
-                        0 -> R.string.tab_library
-                        1 -> R.string.tab_youtube
-                        2 -> R.string.tab_queue
-                        3 -> R.string.tab_liked
-                        4 -> R.string.tab_history
-                        5 -> R.string.tab_playlists
-                        6 -> R.string.tab_settings
-                        8 -> R.string.tab_downloads
-                        else -> R.string.tab_stats
-                    }
                     Text(
-                        text = stringResource(tabTitle),
+                        text = stringResource(currentScreen.titleId),
                         fontWeight = FontWeight.SemiBold,
                     )
                 },
@@ -259,51 +247,33 @@ fun TunePlayerScreen(
                     )
                 }
                 NavigationBar {
+                    fun navItem(
+                        screen: Screens,
+                        labelRes: Int,
+                    ) {
+                        NavigationBarItem(
+                            selected = currentRoute == screen.route,
+                            onClick = { navigateTo(screen.route) },
+                            icon = {
+                                Icon(
+                                    imageVector = if (currentRoute == screen.route) {
+                                        screen.selectedIcon
+                                    } else {
+                                        screen.unselectedIcon
+                                    },
+                                    contentDescription = stringResource(labelRes),
+                                )
+                            },
+                            label = { Text(stringResource(labelRes)) },
+                        )
+                    }
+                    navItem(Screens.Library, R.string.tab_library)
+                    navItem(Screens.Browse, R.string.tab_browse)
+                    navItem(Screens.Search, R.string.tab_youtube)
+                    navItem(Screens.Queue, R.string.tab_queue)
+                    navItem(Screens.Liked, R.string.tab_liked)
                     NavigationBarItem(
-                        selected = selectedTab == 0,
-                        onClick = { selectTab(0) },
-                        icon = { Icon(Icons.Default.LibraryMusic, contentDescription = null) },
-                        label = { Text(stringResource(R.string.tab_library)) },
-                    )
-                    NavigationBarItem(
-                        selected = selectedTab == 1,
-                        onClick = { selectTab(1) },
-                        icon = { Icon(Icons.Default.Search, contentDescription = null) },
-                        label = { Text(stringResource(R.string.tab_youtube)) },
-                    )
-                    NavigationBarItem(
-                        selected = selectedTab == 2,
-                        onClick = { selectTab(2) },
-                        icon = {
-                            val queueCount = state.playbackQueue.size
-                            BadgedBox(
-                                badge = {
-                                    if (queueCount > 0) {
-                                        Badge {
-                                            Text(
-                                                if (queueCount > 99) {
-                                                    stringResource(R.string.queue_badge_overflow)
-                                                } else {
-                                                    queueCount.toString()
-                                                },
-                                            )
-                                        }
-                                    }
-                                },
-                            ) {
-                                Icon(Icons.Default.QueueMusic, contentDescription = null)
-                            }
-                        },
-                        label = { Text(stringResource(R.string.tab_queue)) },
-                    )
-                    NavigationBarItem(
-                        selected = selectedTab == 3,
-                        onClick = { selectTab(3) },
-                        icon = { Icon(Icons.Default.Favorite, contentDescription = null) },
-                        label = { Text(stringResource(R.string.tab_liked)) },
-                    )
-                    NavigationBarItem(
-                        selected = selectedTab >= 4,
+                        selected = false,
                         onClick = { showMore = true },
                         icon = { Icon(Icons.Default.MoreHoriz, contentDescription = null) },
                         label = { Text(stringResource(R.string.tab_more)) },
@@ -346,46 +316,51 @@ fun TunePlayerScreen(
                 }
             }
 
-            // Scroll state lives above the Crossfade so switching tabs and
-            // back lands you where you left off instead of at the top.
+            // Scroll state preserved per route, same as the old Crossfade layer above.
             val libraryListState = rememberLazyListState()
             val queueListState = rememberLazyListState()
             val historyListState = rememberLazyListState()
             val playlistsListState = rememberLazyListState()
             val downloadsListState = rememberLazyListState()
 
-            Crossfade(
-                targetState = selectedTab,
-                animationSpec = tween(180),
-                modifier = Modifier.weight(1f),
-                label = "tab-content",
-            ) { tab ->
-                when (tab) {
-                0 -> LibraryScreen(
-                    tracks = viewModel.visibleLocalTracks,
-                    favoriteIds = state.favoriteIds,
-                    query = state.libraryQuery,
-                    sort = state.librarySort,
-                    sortDescending = state.librarySortDescending,
-                    gridLayout = state.gridLayout,
-                    isLoading = state.isLoadingLocal,
-                    hasPermission = hasAudioPermission,
-                    onRequestPermission = { permissionLauncher.launch(permission) },
-                    onQueryChange = viewModel::updateLibraryQuery,
-                    onSortChange = viewModel::setLibrarySort,
-                    onToggleSortDirection = viewModel::toggleLibrarySortDirection,
-                    onToggleLayout = viewModel::toggleGridLayout,
-                    onRefresh = viewModel::loadLocalMusic,
-                    onShuffleAll = viewModel::shuffleAll,
-                    onPlayAll = viewModel::playAll,
-                    listState = libraryListState,
-                    onPlay = viewModel::play,
-                    onPlayNext = viewModel::playNext,
-                    onToggleFavorite = viewModel::toggleFavorite,
-                    onShare = { track -> shareTrack(context, track) },
-                )
+            Box(modifier = Modifier.weight(1f)) {
+                when (currentRoute) {
+                    Screens.Library.route -> LibraryScreen(
+                        tracks = viewModel.visibleLocalTracks,
+                        favoriteIds = state.favoriteIds,
+                        query = state.libraryQuery,
+                        sort = state.librarySort,
+                        sortDescending = state.librarySortDescending,
+                        gridLayout = state.gridLayout,
+                        isLoading = state.isLoadingLocal,
+                        hasPermission = hasAudioPermission,
+                        onRequestPermission = { permissionLauncher.launch(permission) },
+                        onQueryChange = viewModel::updateLibraryQuery,
+                        onSortChange = viewModel::setLibrarySort,
+                        onToggleSortDirection = viewModel::toggleLibrarySortDirection,
+                        onToggleLayout = viewModel::toggleGridLayout,
+                        onRefresh = viewModel::loadLocalMusic,
+                        onShuffleAll = viewModel::shuffleAll,
+                        onPlayAll = viewModel::playAll,
+                        listState = libraryListState,
+                        onPlay = viewModel::play,
+                        onPlayNext = viewModel::playNext,
+                        onToggleFavorite = viewModel::toggleFavorite,
+                        onShare = { track -> shareTrack(context, track) },
+                    )
 
-                1 -> YouTubeScreen(
+                    Screens.Browse.route -> BrowseScreen(
+                        shelves = state.homeShelves,
+                        isLoading = state.isLoadingHomeRecommendations,
+                        favoriteIds = state.favoriteIds,
+                        onPlay = viewModel::play,
+                        onPlayNext = viewModel::playNext,
+                        onToggleFavorite = viewModel::toggleFavorite,
+                        onShare = { track -> shareTrack(context, track) },
+                        onPlayShelf = viewModel::shuffleTracks,
+                    )
+
+                    Screens.Search.route -> YouTubeScreen(
                     query = state.query,
                     results = state.searchResults,
                     topResult = state.searchTopResult,
@@ -409,7 +384,7 @@ fun TunePlayerScreen(
                     onShare = { track -> shareTrack(context, track) },
                 )
 
-                2 -> QueueScreen(
+                Screens.Queue.route -> QueueScreen(
                     queue = state.playbackQueue,
                     currentIndex = state.queueIndex,
                     onPlay = { index -> viewModel.playFromQueue(state.playbackQueue, index) },
@@ -419,7 +394,7 @@ fun TunePlayerScreen(
                     listState = queueListState,
                 )
 
-                3 -> {
+                Screens.Liked.route -> {
                     val favoriteTracks = state.localTracks.filter { it.id in state.favoriteIds } +
                         state.searchResults.filter { it.id in state.favoriteIds } +
                         state.downloadedTracks.filter { it.id in state.favoriteIds }
@@ -435,7 +410,7 @@ fun TunePlayerScreen(
                     )
                 }
 
-                4 -> HistoryScreen(
+                Screens.History.route -> HistoryScreen(
                     tracks = state.historyTracks,
                     favoriteIds = state.favoriteIds,
                     onPlay = viewModel::play,
@@ -447,7 +422,7 @@ fun TunePlayerScreen(
                     listState = historyListState,
                 )
 
-                5 -> PlaylistsScreen(
+                Screens.Playlists.route -> PlaylistsScreen(
                     playlists = state.playlists,
                     tracksFor = viewModel::tracksForPlaylist,
                     favoriteIds = state.favoriteIds,
@@ -463,7 +438,7 @@ fun TunePlayerScreen(
                     listState = playlistsListState,
                 )
 
-                6 -> SettingsScreen(
+                Screens.Settings.route -> SettingsScreen(
                     theme = state.theme,
                     equalizerEnabled = state.equalizerEnabled,
                     bassBoostLevel = state.bassBoostLevel,
@@ -510,7 +485,7 @@ fun TunePlayerScreen(
                      onDiscordApplicationIdRemove = viewModel::removeDiscordApplicationId,
                 )
 
-                7 -> StatsScreen(
+                Screens.Stats.route -> StatsScreen(
                     totalPlays = viewModel.totalPlays(),
                     distinctTracks = viewModel.distinctTracks(),
                     topTracks = viewModel.topTracks(),
@@ -521,7 +496,7 @@ fun TunePlayerScreen(
                     onShare = { track -> shareTrack(context, track) },
                 )
 
-                8 -> DownloadsScreen(
+                Screens.Downloads.route -> DownloadsScreen(
                     tracks = state.downloadedTracks,
                     totalBytes = state.downloadTotalBytes,
                     favoriteIds = state.favoriteIds,
@@ -543,35 +518,35 @@ fun TunePlayerScreen(
                     icon = Icons.Default.History,
                     label = stringResource(R.string.tab_history),
                 ) {
-                    selectTab(4)
+                    navigateTo(Screens.History.route)
                     showMore = false
                 }
                 MoreSheetItem(
                     icon = Icons.Default.PlaylistPlay,
                     label = stringResource(R.string.tab_playlists),
                 ) {
-                    selectTab(5)
+                    navigateTo(Screens.Playlists.route)
                     showMore = false
                 }
                 MoreSheetItem(
                     icon = Icons.Default.Download,
                     label = stringResource(R.string.tab_downloads),
                 ) {
-                    selectTab(8)
+                    navigateTo(Screens.Downloads.route)
                     showMore = false
                 }
                 MoreSheetItem(
                     icon = Icons.Default.BarChart,
                     label = stringResource(R.string.tab_stats),
                 ) {
-                    selectTab(7)
+                    navigateTo(Screens.Stats.route)
                     showMore = false
                 }
                 MoreSheetItem(
                     icon = Icons.Default.Settings,
                     label = stringResource(R.string.tab_settings),
                 ) {
-                    selectTab(6)
+                    navigateTo(Screens.Settings.route)
                     showMore = false
                 }
             }
@@ -604,7 +579,7 @@ fun TunePlayerScreen(
                 },
                 onOpenQueue = {
                     showPlayer = false
-                    selectTab(2)
+                    navigateTo(Screens.Queue.route)
                 },
                 onDismiss = { showPlayer = false },
             )
