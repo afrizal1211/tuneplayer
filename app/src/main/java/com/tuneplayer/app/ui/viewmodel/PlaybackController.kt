@@ -94,12 +94,16 @@ internal fun TunePlayerViewModel.advanceAfterTrackEnded() {
 }
 
 internal fun TunePlayerViewModel.skipToNext() {
-    controller?.seekToNext()
+    val player = controller ?: return
+    runCatching { player.seekToNext() }
+        .onFailure { LogCatcher.w(TAG, "seekToNext failed", it) }
 }
 
 /** Restarts the track when past the platform's previous threshold, else goes back. */
 internal fun TunePlayerViewModel.skipToPrevious() {
-    controller?.seekToPrevious()
+    val player = controller ?: return
+    runCatching { player.seekToPrevious() }
+        .onFailure { LogCatcher.w(TAG, "seekToPrevious failed", it) }
 }
 
 internal fun TunePlayerViewModel.togglePlayPause() {
