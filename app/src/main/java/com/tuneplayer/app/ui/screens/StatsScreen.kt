@@ -46,10 +46,15 @@ internal fun StatsScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(24.dp),
+            horizontalArrangement = Arrangement.spacedBy(20.dp),
         ) {
             StatCell(stringResource(R.string.stats_total_plays), totalPlays)
             StatCell(stringResource(R.string.stats_distinct_tracks), distinctTracks)
+            // ~4 min average per play
+            val minutes = (totalPlays * 4L / 60).toInt()
+            val hours = minutes / 60
+            val mins = minutes % 60
+            StatCell(stringResource(R.string.stats_listening_time), stringResource(R.string.stats_hours, hours, mins), isString = true)
         }
         Text(
             text = stringResource(R.string.stats_top_tracks),
@@ -80,10 +85,13 @@ internal fun StatsScreen(
 }
 
 @Composable
-internal fun StatCell(label: String, value: Int) {
+internal fun StatCell(label: String, value: Int) = StatCell(label, value.toString())
+
+@Composable
+internal fun StatCell(label: String, value: String, isString: Boolean = false) {
     Column {
         Text(
-            text = value.toString(),
+            text = value,
             style = MaterialTheme.typography.headlineSmall,
         )
         Text(

@@ -121,6 +121,14 @@ interface DatabaseDao {
     @Query("SELECT songId FROM play_count GROUP BY songId ORDER BY SUM(count) DESC, songId ASC LIMIT :limit")
     suspend fun topSongIds(limit: Int): List<String>
 
+    data class TrackWithPlays(val songId: String, val playCount: Int)
+    @Query("SELECT songId, SUM(count) as playCount FROM play_count GROUP BY songId ORDER BY playCount DESC, songId ASC LIMIT :limit")
+    suspend fun topTracksWithPlays(limit: Int): List<TrackWithPlays>
+
+    // Total plays from event log (not just play_count table)
+    @Query("SELECT COUNT(*) FROM event")
+    suspend fun totalEventCount(): Int
+
     // --- Search history ---
 
     @Query("SELECT * FROM search_history ORDER BY timestamp DESC LIMIT :limit")
