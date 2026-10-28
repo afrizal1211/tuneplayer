@@ -184,7 +184,7 @@ internal suspend fun TunePlayerViewModel.buildDiscordActivity(track: Track, isPa
     // timestamps, just without the sleeve.
     val applicationId = app.settingsStore.discordApplicationId
     val token = app.settingsStore.discordToken
-    val artworkUrl = track.artworkUri?.toString()?.takeIf {
+    val artworkUrl = track.artworkUri?.takeIf {
         it.startsWith("http://") || it.startsWith("https://")
     }
     val largeImage = if (applicationId != null && token != null && artworkUrl != null) {

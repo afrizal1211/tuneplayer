@@ -165,5 +165,5 @@ internal fun TunePlayerViewModel.totalPlays(): Int = runCatching {
 internal fun TunePlayerViewModel.distinctTracks(): Int = runCatching {
     kotlinx.coroutines.runBlocking {
         app.database.dao().allPlayCounts()
-    }?.distinctBy { it.songId }?.size ?: 0
+    }.distinctBy { it.songId }.size
 }.getOrDefault(0)

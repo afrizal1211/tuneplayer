@@ -8,7 +8,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.common.Tracks
-import androidx.media3.common.util.UnstableApi
+
 import com.metrolist.innertubex.extraction.StreamResolveException
 import com.tuneplayer.app.R
 import com.tuneplayer.app.data.lyrics.activeLineIndex
@@ -342,7 +342,6 @@ internal fun TunePlayerViewModel.updateAudioInfo(tracks: Tracks) {
     )
 }
 
-@OptIn(UnstableApi::class)
 internal fun TunePlayerViewModel.audioInfoFromTracks(tracks: Tracks): AudioInfo? {
     val group = tracks.groups.firstOrNull {
         it.type == C.TRACK_TYPE_AUDIO && it.isSelected

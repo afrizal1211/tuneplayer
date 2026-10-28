@@ -139,27 +139,29 @@ class TempoEstimator(private val context: Context) {
 
             while (!sawOutputEos) {
                 if (!sawInputEos) {
-                    val inputIndex = codec!!.dequeueInputBuffer(TIMEOUT_US)
+                    val inputIndex = codec.dequeueInputBuffer(TIMEOUT_US)
                     if (inputIndex >= 0) {
-                        val buffer = codec!!.getInputBuffer(inputIndex)!!
-                        val size = extractor.readSampleData(buffer, 0)
-                        if (size < 0) {
-                            codec!!.queueInputBuffer(
-                                inputIndex, 0, 0, 0,
-                                MediaCodec.BUFFER_FLAG_END_OF_STREAM,
-                            )
-                            sawInputEos = true
-                        } else {
-                            codec!!.queueInputBuffer(
-                                inputIndex, 0, size, extractor.sampleTime, 0,
-                            )
-                            extractor.advance()
+                        val buffer = codec.getInputBuffer(inputIndex)
+                        if (buffer != null) {
+                            val size = extractor.readSampleData(buffer, 0)
+                            if (size < 0) {
+                                codec.queueInputBuffer(
+                                    inputIndex, 0, 0, 0,
+                                    MediaCodec.BUFFER_FLAG_END_OF_STREAM,
+                                )
+                                sawInputEos = true
+                            } else {
+                                codec.queueInputBuffer(
+                                    inputIndex, 0, size, extractor.sampleTime, 0,
+                                )
+                                extractor.advance()
+                            }
                         }
                     }
                 }
-                val outputIndex = codec!!.dequeueOutputBuffer(info, TIMEOUT_US)
+                val outputIndex = codec.dequeueOutputBuffer(info, TIMEOUT_US)
                 if (outputIndex >= 0) {
-                    val buffer = codec!!.getOutputBuffer(outputIndex)
+                    val buffer = codec.getOutputBuffer(outputIndex)
                     if (buffer != null && info.size > 0) {
                         val chunk = ByteArray(info.size)
                         buffer.position(info.offset)
@@ -167,7 +169,7 @@ class TempoEstimator(private val context: Context) {
                         buffer.get(chunk)
                         sink.write(chunk)
                     }
-                    codec!!.releaseOutputBuffer(outputIndex, false)
+                    codec.releaseOutputBuffer(outputIndex, false)
                     if (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) {
                         sawOutputEos = true
                     }

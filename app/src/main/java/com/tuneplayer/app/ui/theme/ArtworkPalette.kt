@@ -165,7 +165,7 @@ private fun seedOf(bitmap: ImageBitmap): Seed? {
     if (all.isEmpty()) return null
     val accentCandidates = runCatching { paletteSwatches(bitmap, SWATCH_COUNT, false) }.getOrNull()?.ifEmpty { all } ?: all
 
-    val dominant = all.maxBy { it.population } ?: return null
+    val dominant = all.maxBy { it.population }
     val vibrant: Swatch? = accentCandidates.maxBy { swatch: Swatch ->
         val hsl = FloatArray(3).also { ColorUtils.colorToHSL(swatch.rgb, it) }
         hsl[1] * sqrt(swatch.population.toFloat())

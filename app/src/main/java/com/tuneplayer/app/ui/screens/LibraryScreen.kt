@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.GridView
@@ -360,7 +361,7 @@ internal fun LibraryFilterBar(
         }
         Box {
             IconButton(onClick = { sortMenuOpen = true }) {
-                Icon(Icons.Default.Sort, contentDescription = stringResource(R.string.sort_by_title))
+                Icon(Icons.AutoMirrored.Filled.Sort, contentDescription = stringResource(R.string.sort_by_title))
             }
             DropdownMenu(
                 expanded = sortMenuOpen,

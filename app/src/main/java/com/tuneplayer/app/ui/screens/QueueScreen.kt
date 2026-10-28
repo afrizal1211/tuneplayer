@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DragHandle
@@ -26,7 +27,6 @@ import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.QueueMusic
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -35,6 +35,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
@@ -79,88 +80,90 @@ internal fun QueueScreen(
 
     if (queue.isEmpty()) {
         EmptyState(
-            icon = Icons.Default.QueueMusic,
+            icon = Icons.AutoMirrored.Filled.QueueMusic,
             title = stringResource(R.string.queue_empty),
             hint = stringResource(R.string.queue_empty_hint),
         )
         return
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        val totalMs = queue.sumOf { it.durationMs }
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = stringResource(R.string.queue_title_count, queue.size),
-                    style = MaterialTheme.typography.titleMedium,
-                )
-                if (totalMs > 0L) {
+    Surface(color = MaterialTheme.colorScheme.surface) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            val totalMs = queue.sumOf { it.durationMs }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = stringResource(R.string.queue_total_duration, formatDuration(totalMs)),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        text = stringResource(R.string.queue_title_count, queue.size),
+                        style = MaterialTheme.typography.titleMedium,
                     )
+                    if (totalMs > 0L) {
+                        Text(
+                            text = stringResource(R.string.queue_total_duration, formatDuration(totalMs)),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
-            }
-            TextButton(onClick = { confirmClear = true }) {
-                Icon(Icons.Default.Delete, contentDescription = null)
-                Spacer(Modifier.width(4.dp))
-                Text(stringResource(R.string.action_clear))
-            }
-        }
-    val effectiveListState = listState ?: rememberLazyListState()
-    LazyColumn(
-        state = effectiveListState,
-        modifier = Modifier
-            .fillMaxSize()
-            .fadingEdge(bottom = 12.dp),
-        contentPadding = PaddingValues(bottom = 12.dp),
-    ) {
-        // Keyed by position, not id: the radio seed allows the same track
-        // twice (per-artist cap of 2), and Compose throws on a repeated key.
-        itemsIndexed(items = queue, key = { index, _ -> index }) { index, track ->
-            QueueRow(
-                track = track,
-                isPlaying = index == currentIndex,
-                canMoveUp = index > 0,
-                canMoveDown = index < queue.lastIndex,
-                onPlay = { onPlay(index) },
-                onRemove = { onRemove(index) },
-                onMoveUp = { onMove(index, index - 1) },
-                onMoveDown = { onMove(index, index + 1) },
-                onReorder = { deltaRows -> onMove(index, (index + deltaRows).coerceIn(0, queue.lastIndex)) },
-            )
-            HorizontalDivider(modifier = Modifier.padding(start = 72.dp))
-        }
-    }
-    }
-
-    if (confirmClear) {
-        AlertDialog(
-            onDismissRequest = { confirmClear = false },
-            title = { Text(stringResource(R.string.action_clear)) },
-            text = { Text(stringResource(R.string.queue_clear_confirm)) },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        confirmClear = false
-                        onClear()
-                    },
-                ) {
+                TextButton(onClick = { confirmClear = true }) {
+                    Icon(Icons.Default.Delete, contentDescription = null)
+                    Spacer(Modifier.width(4.dp))
                     Text(stringResource(R.string.action_clear))
                 }
-            },
-            dismissButton = {
-                TextButton(onClick = { confirmClear = false }) {
-                    Text(stringResource(R.string.action_cancel))
+            }
+            val effectiveListState = listState ?: rememberLazyListState()
+            LazyColumn(
+                state = effectiveListState,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .fadingEdge(bottom = 12.dp),
+                contentPadding = PaddingValues(bottom = 12.dp),
+            ) {
+                // Keyed by position, not id: the radio seed allows the same track
+                // twice (per-artist cap of 2), and Compose throws on a repeated key.
+                itemsIndexed(items = queue, key = { index, _ -> index }) { index, track ->
+                    QueueRow(
+                        track = track,
+                        isPlaying = index == currentIndex,
+                        canMoveUp = index > 0,
+                        canMoveDown = index < queue.lastIndex,
+                        onPlay = { onPlay(index) },
+                        onRemove = { onRemove(index) },
+                        onMoveUp = { onMove(index, index - 1) },
+                        onMoveDown = { onMove(index, index + 1) },
+                        onReorder = { deltaRows -> onMove(index, (index + deltaRows).coerceIn(0, queue.lastIndex)) },
+                    )
+                    HorizontalDivider(modifier = Modifier.padding(start = 72.dp))
                 }
-            },
-        )
+            }
+        }
+
+        if (confirmClear) {
+            AlertDialog(
+                onDismissRequest = { confirmClear = false },
+                title = { Text(stringResource(R.string.action_clear)) },
+                text = { Text(stringResource(R.string.queue_clear_confirm)) },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            confirmClear = false
+                            onClear()
+                        },
+                    ) {
+                        Text(stringResource(R.string.action_clear))
+                    } },
+                dismissButton = {
+                    TextButton(onClick = { confirmClear = false }) {
+                        Text(stringResource(R.string.action_cancel))
+                    }
+                },
+            )
+        }
+    }
     }
 }
 

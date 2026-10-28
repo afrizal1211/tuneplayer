@@ -114,7 +114,7 @@ private fun QuickPickGrid(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 8.dp),
+            .padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         tracks.chunked(2).forEach { pair ->

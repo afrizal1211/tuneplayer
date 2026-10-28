@@ -2,13 +2,14 @@ package com.tuneplayer.app.ui
 
 import androidx.annotation.StringRes
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.QueueMusic
+import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LibraryMusic
-import androidx.compose.material.icons.filled.PlaylistPlay
 import androidx.compose.material.icons.filled.QueueMusic
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
@@ -57,8 +58,8 @@ sealed class Screens(
     data object Queue : Screens(
         route = "queue",
         titleId = R.string.tab_queue,
-        selectedIcon = Icons.Filled.QueueMusic,
-        unselectedIcon = Icons.Outlined.QueueMusic,
+        selectedIcon = Icons.AutoMirrored.Filled.QueueMusic,
+        unselectedIcon = Icons.AutoMirrored.Filled.QueueMusic,
     )
 
     data object Liked : Screens(
@@ -78,8 +79,8 @@ sealed class Screens(
     data object Playlists : Screens(
         route = "playlists",
         titleId = R.string.tab_playlists,
-        selectedIcon = Icons.Filled.PlaylistPlay,
-        unselectedIcon = Icons.Filled.PlaylistPlay,
+        selectedIcon = Icons.AutoMirrored.Filled.PlaylistPlay,
+        unselectedIcon = Icons.AutoMirrored.Filled.PlaylistPlay,
     )
 
     data object Stats : Screens(
