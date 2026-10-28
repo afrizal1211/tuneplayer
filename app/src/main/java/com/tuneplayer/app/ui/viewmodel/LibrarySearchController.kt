@@ -141,13 +141,24 @@ internal fun TunePlayerViewModel.loadDetailTracks(browseId: String, title: Strin
 /**
  * Shelves for a browse category (Charts, Explore, Mood & Genres).
  * Route "category:<browseId>" opens it; title is the human label.
+ * Cached by browseId (LRU cap 8) so re-opening a tab is instant.
  */
 internal fun TunePlayerViewModel.loadBrowseCategory(browseId: String, title: String) {
+    categoryCache[browseId]?.let { cached ->
+        uiState = uiState.copy(
+            categoryShelves = cached,
+            categoryTitle = title,
+            isLoadingCategory = false,
+        )
+        return
+    }
     if (uiState.isLoadingCategory) return
     uiState = uiState.copy(isLoadingCategory = true, categoryTitle = title)
     viewModelScope.launch {
         try {
             val shelves = youTubeRepository.browseShelves(browseId)
+            if (categoryCache.size >= 8) categoryCache.entries.firstOrNull()?.key?.let { categoryCache.remove(it) }
+            categoryCache[browseId] = shelves
             uiState = uiState.copy(categoryShelves = shelves, isLoadingCategory = false)
         } catch (cancelled: CancellationException) {
             throw cancelled

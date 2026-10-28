@@ -169,6 +169,8 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
     internal val queueStore = app.queueStore
     internal val playStatsStore = app.playStatsStore
     internal val resolvedUris = LinkedHashMap<String, String>()
+    /** browseId -> shelves cache for category pages (LRU-ish, capped at 8). */
+    internal val categoryCache = LinkedHashMap<String, List<com.tuneplayer.app.data.youtube.YouTubeHomeShelf>>()
     internal var positionPollJob: kotlinx.coroutines.Job? = null
     internal var lyricsJob: Job? = null
     internal var lyricsTrackId: String? = null
