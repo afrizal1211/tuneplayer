@@ -8,6 +8,13 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
+// Monotonic versionCode from commit count; falls back to 1 outside a git checkout.
+val gitCommitCount: Int = runCatching {
+    providers.exec {
+        commandLine("git", "rev-list", "--count", "HEAD")
+    }.standardOutput.asText.get().trim().toInt()
+}.getOrDefault(1)
+
 android {
     namespace = "com.tuneplayer.app"
     compileSdk = 37
@@ -17,7 +24,7 @@ android {
         applicationId = "com.tuneplayer.app"
         minSdk = 26
         targetSdk = 37
-        versionCode = 1
+        versionCode = gitCommitCount
         versionName = "0.1.0"
     }
 
