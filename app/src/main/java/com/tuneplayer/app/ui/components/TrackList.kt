@@ -144,8 +144,9 @@ internal fun GridTrackCell(
         Artwork(track = track, size = 160)
         Spacer(Modifier.height(6.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
+            val displayTitle = if (track.title.isNotBlank()) track.title else track.artist
             Text(
-                var displayTitle = if (track.title.isNotBlank()) track.title else track.artist; text = displayTitle,
+                text = displayTitle,
                 style = MaterialTheme.typography.bodyMedium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -212,8 +213,9 @@ internal fun TrackRow(
             },
         ),
         headlineContent = {
+            val displayTitle = if (track.title.isNotBlank()) track.title else track.artist
             Text(
-                var displayTitle = if (track.title.isNotBlank()) track.title else track.artist; text = displayTitle,
+                text = displayTitle,
                 style = MaterialTheme.typography.titleSmall,
                 color = if (isCurrent) {
                     MaterialTheme.colorScheme.primary
