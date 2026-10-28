@@ -2,6 +2,7 @@ package com.tuneplayer.app.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -46,6 +47,8 @@ internal fun BrowseScreen(
     onPlayNext: (Track) -> Unit,
     onToggleFavorite: (Track) -> Unit,
     onShare: (Track) -> Unit,
+    onOpenArtist: (Track) -> Unit = {},
+    onOpenAlbum: (Track) -> Unit = {},
     onPlayShelf: (List<Track>) -> Unit,
 ) {
     if (isLoading && shelves.isEmpty()) {
@@ -87,6 +90,8 @@ internal fun BrowseScreen(
                     onPlayNext = onPlayNext,
                     onToggleFavorite = onToggleFavorite,
                     onShare = onShare,
+                    onOpenArtist = onOpenArtist,
+                    onOpenAlbum = onOpenAlbum,
                 )
             } else {
                 ShelfRail(
@@ -96,6 +101,8 @@ internal fun BrowseScreen(
                     onPlayNext = onPlayNext,
                     onToggleFavorite = onToggleFavorite,
                     onShare = onShare,
+                    onOpenArtist = onOpenArtist,
+                    onOpenAlbum = onOpenAlbum,
                 )
             }
         }
@@ -110,6 +117,8 @@ private fun QuickPickGrid(
     onPlayNext: (Track) -> Unit,
     onToggleFavorite: (Track) -> Unit,
     onShare: (Track) -> Unit,
+    onOpenArtist: (Track) -> Unit = {},
+    onOpenAlbum: (Track) -> Unit = {},
 ) {
     Column(
         modifier = Modifier
@@ -128,6 +137,8 @@ private fun QuickPickGrid(
                             onPlayNext = { onPlayNext(track) },
                             onToggleFavorite = { onToggleFavorite(track) },
                             onShare = { onShare(track) },
+                            onOpenArtist = { onOpenArtist(track) },
+                            onOpenAlbum = { onOpenAlbum(track) },
                         )
                     }
                 }
@@ -145,6 +156,8 @@ private fun ShelfRail(
     onPlayNext: (Track) -> Unit,
     onToggleFavorite: (Track) -> Unit,
     onShare: (Track) -> Unit,
+    onOpenArtist: (Track) -> Unit = {},
+    onOpenAlbum: (Track) -> Unit = {},
 ) {
     LazyRow(
         contentPadding = PaddingValues(horizontal = 16.dp),
@@ -155,7 +168,15 @@ private fun ShelfRail(
             Column(
                 modifier = Modifier
                     .width(140.dp)
-                    .clickable { onPlay(track) },
+                    .combinedClickable(
+                        onClick = { onPlay(track) },
+                        onLongClick = {
+                            when {
+                                track.artistBrowseId != null -> onOpenArtist(track)
+                                track.albumBrowseId != null -> onOpenAlbum(track)
+                            }
+                        },
+                    ),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Artwork(

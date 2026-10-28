@@ -150,6 +150,12 @@ fun TunePlayerScreen(
     }
     LaunchedEffect(currentRoute) {
         if (currentRoute == Screens.Browse.route) viewModel.loadHomeRecommendations()
+        if (currentRoute.startsWith("artist:") || currentRoute.startsWith("album:")) {
+            val browseId = currentRoute.substringAfter(":")
+            val title = currentRoute.substringBefore(":")
+                .replaceFirstChar { if (it.isLowerCase()) it.titlecase(java.util.Locale.ROOT) else it.toString() }
+            viewModel.loadDetailTracks(browseId, title)
+        }
     }
     var showSleepDialog by rememberSaveable { mutableStateOf(false) }
     var showLyricsSheet by rememberSaveable { mutableStateOf(false) }
@@ -361,6 +367,12 @@ fun TunePlayerScreen(
                         onPlayNext = viewModel::playNext,
                         onToggleFavorite = viewModel::toggleFavorite,
                         onShare = { track -> shareTrack(context, track) },
+                        onOpenArtist = { track ->
+                            track.artistBrowseId?.let { navigateTo("artist:$it") }
+                        },
+                        onOpenAlbum = { track ->
+                            track.albumBrowseId?.let { navigateTo("album:$it") }
+                        },
                         onPlayShelf = viewModel::shuffleTracks,
                     )
 
@@ -502,6 +514,47 @@ fun TunePlayerScreen(
                     onToggleFavorite = viewModel::toggleFavorite,
                     onShare = { track -> shareTrack(context, track) },
                 )
+
+                // Detail routes "artist:<browseId>" / "album:<browseId>".
+                else -> if (currentRoute.startsWith("artist:") || currentRoute.startsWith("album:")) {
+                    val browseId = currentRoute.substringAfter(":")
+                    DetailScreen(
+                        title = state.detailTitle.ifEmpty { currentRoute.substringBefore(":") },
+                        tracks = state.detailTracks,
+                        isLoading = state.isLoadingDetail,
+                        favoriteIds = state.favoriteIds,
+                        onPlay = viewModel::play,
+                        onPlayNext = viewModel::playNext,
+                        onToggleFavorite = viewModel::toggleFavorite,
+                        onShare = { track -> shareTrack(context, track) },
+                        onPlayAll = { viewModel.playTracks(state.detailTracks) },
+                        onShuffleAll = { viewModel.shuffleTracks(state.detailTracks) },
+                    )
+                } else {
+                    LibraryScreen(
+                        tracks = viewModel.visibleLocalTracks,
+                        favoriteIds = state.favoriteIds,
+                        query = state.libraryQuery,
+                        sort = state.librarySort,
+                        sortDescending = state.librarySortDescending,
+                        gridLayout = state.gridLayout,
+                        isLoading = state.isLoadingLocal,
+                        hasPermission = hasAudioPermission,
+                        onRequestPermission = { permissionLauncher.launch(permission) },
+                        onQueryChange = viewModel::updateLibraryQuery,
+                        onSortChange = viewModel::setLibrarySort,
+                        onToggleSortDirection = viewModel::toggleLibrarySortDirection,
+                        onToggleLayout = viewModel::toggleGridLayout,
+                        onRefresh = viewModel::loadLocalMusic,
+                        onShuffleAll = viewModel::shuffleAll,
+                        onPlayAll = viewModel::playAll,
+                        listState = libraryListState,
+                        onPlay = viewModel::play,
+                        onPlayNext = viewModel::playNext,
+                        onToggleFavorite = viewModel::toggleFavorite,
+                        onShare = { track -> shareTrack(context, track) },
+                    )
+                }
 
                 Screens.Downloads.route -> DownloadsScreen(
                     tracks = state.downloadedTracks,

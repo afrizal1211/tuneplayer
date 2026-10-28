@@ -135,6 +135,10 @@ data class TunePlayerUiState(
     val libraryQuery: String = "",
     val youtubeSignedIn: Boolean = false,
     val youtubeAudioQuality: YouTubeAudioQuality = YouTubeAudioQuality.High,
+    /** Tracks of a browsed artist/album; route holds the browseId. */
+    val detailTracks: List<Track> = emptyList(),
+    val detailTitle: String = "",
+    val isLoadingDetail: Boolean = false,
     val lyricsOffsetMs: Long = 0L,
     val lyricsSource: LyricsSource? = null,
     val downloadedTracks: List<Track> = emptyList(),

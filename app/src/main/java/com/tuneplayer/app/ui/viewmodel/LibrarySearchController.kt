@@ -119,6 +119,25 @@ internal fun TunePlayerViewModel.loadHomeRecommendations() {
  * commits a term. Signed-in users get the account-aware dropdown, while
  * guests still receive YouTube's public query completions and song rows.
  */
+/**
+ * Tracks for an artist/album browseId. Route "artist:<id>" / "album:<id>" opens it.
+ */
+internal fun TunePlayerViewModel.loadDetailTracks(browseId: String, title: String) {
+    if (uiState.isLoadingDetail) return
+    uiState = uiState.copy(isLoadingDetail = true, detailTitle = title)
+    viewModelScope.launch {
+        try {
+            val tracks = youTubeRepository.browseTracks(browseId)
+            uiState = uiState.copy(detailTracks = tracks, isLoadingDetail = false)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            LogCatcher.d(TAG, "browse detail failed: ${error.message}")
+            uiState = uiState.copy(isLoadingDetail = false)
+        }
+    }
+}
+
 internal fun TunePlayerViewModel.scheduleSearchSuggestions(rawQuery: String) {
     searchSuggestionsJob?.cancel()
     val query = rawQuery.trim()

@@ -10,6 +10,10 @@ data class Track(
     val mediaUri: String? = null,
     val videoId: String? = null,
     val isLocal: Boolean = false,
+    /** YouTube browseId for the artist page, when the renderer exposed it. */
+    val artistBrowseId: String? = null,
+    /** YouTube browseId for the album page, when the renderer exposed it. */
+    val albumBrowseId: String? = null,
     /**
      * True for YouTube's music-video uploads, which duplicate an audio track
      * under a different videoId. Queue building prefers the audio cut.

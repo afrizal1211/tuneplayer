@@ -290,6 +290,22 @@ class YouTubeMusicRepository {
             .filter { it.tracks.isNotEmpty() }
     }
 
+    /**
+     * Flat track list for an artist/album/playlist browseId (e.g. "UC…", "MPREb…").
+     * Reuses the shared renderer collectors so shelves and detail pages parse identically.
+     */
+    suspend fun browseTracks(browseId: String, limit: Int = 50): List<Track> {
+        val response = innerTube
+            .browse(client = YouTubeClient.WEB_REMIX, browseId = browseId)
+            .body<JsonObject>()
+        val renderers = mutableListOf<JsonObject>()
+        collectRenderersDeep(response, renderers)
+        return renderers
+            .mapNotNull(::parseTrackRenderer)
+            .distinctBy { it.id }
+            .take(limit)
+    }
+
     private fun collectHomeShelves(element: JsonElement, output: MutableList<HomeShelf>) {
         when (element) {
             is JsonObject -> {
@@ -362,6 +378,16 @@ class YouTubeMusicRepository {
                 .mapNotNull(::parseDurationMs)
                 .firstOrNull()
                 ?: 0L
+            val artistBrowseId = subtitle.firstNotNullOfOrNull { run ->
+                run.navigationEndpoint?.browseEndpoint?.browseId?.takeIf { id ->
+                    id.startsWith("UC") || id.startsWith("FEmusic_artist")
+                }
+            }
+            val albumBrowseId = subtitle.firstNotNullOfOrNull { run ->
+                run.navigationEndpoint?.browseEndpoint?.browseId?.takeIf { id ->
+                    id.startsWith("MPREb") || id.startsWith("FEmusic_album")
+                }
+            }
 
             Track(
                 id = "yt:$videoId",
@@ -371,6 +397,8 @@ class YouTubeMusicRepository {
                 artworkUri = artwork,
                 videoId = videoId,
                 isLocal = false,
+                artistBrowseId = artistBrowseId,
+                albumBrowseId = albumBrowseId,
             )
         }.getOrNull()
 

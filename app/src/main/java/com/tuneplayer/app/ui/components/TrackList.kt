@@ -2,6 +2,7 @@ package com.tuneplayer.app.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -70,6 +71,8 @@ internal fun TrackList(
     onPlayNext: (Track) -> Unit,
     onToggleFavorite: (Track) -> Unit,
     onShare: (Track) -> Unit,
+    onOpenArtist: ((Track) -> Unit)? = null,
+    onOpenAlbum: ((Track) -> Unit)? = null,
     grid: Boolean = false,
     listState: LazyListState? = null,
 ) {
@@ -86,6 +89,8 @@ internal fun TrackList(
                     track = track,
                     isFavorite = track.id in favoriteIds,
                     onPlay = { onPlay(track) },
+                    onOpenArtist = onOpenArtist?.let { f -> { f(track) } },
+                    onOpenAlbum = onOpenAlbum?.let { f -> { f(track) } },
                 )
             }
         }
@@ -105,6 +110,8 @@ internal fun TrackList(
                 onPlayNext = { onPlayNext(track) },
                 onToggleFavorite = { onToggleFavorite(track) },
                 onShare = { onShare(track) },
+                onOpenArtist = onOpenArtist?.let { f -> { f(track) } },
+                onOpenAlbum = onOpenAlbum?.let { f -> { f(track) } },
             )
             HorizontalDivider(modifier = Modifier.padding(start = 72.dp))
         }
@@ -116,12 +123,22 @@ internal fun GridTrackCell(
     track: Track,
     isFavorite: Boolean,
     onPlay: () -> Unit,
+    onOpenArtist: (() -> Unit)? = null,
+    onOpenAlbum: (() -> Unit)? = null,
 ) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .clickable(onClick = onPlay)
+            .combinedClickable(
+                onClick = onPlay,
+                onLongClick = {
+                    when {
+                        track.artistBrowseId != null -> onOpenArtist?.invoke()
+                        track.albumBrowseId != null -> onOpenAlbum?.invoke()
+                    }
+                },
+            )
             .padding(4.dp),
     ) {
         Artwork(track = track, size = 160)
@@ -161,6 +178,8 @@ internal fun TrackRow(
     onPlayNext: () -> Unit,
     onToggleFavorite: () -> Unit,
     onShare: () -> Unit,
+    onOpenArtist: (() -> Unit)? = null,
+    onOpenAlbum: (() -> Unit)? = null,
     trailing: (@Composable () -> Unit)? = null,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
@@ -175,7 +194,15 @@ internal fun TrackRow(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
-            .clickable(onClick = onPlay)
+            .combinedClickable(
+                onClick = onPlay,
+                onLongClick = {
+                    when {
+                        track.artistBrowseId != null -> onOpenArtist?.invoke()
+                        track.albumBrowseId != null -> onOpenAlbum?.invoke()
+                    }
+                },
+            )
             .padding(horizontal = 8.dp, vertical = 2.dp),
         colors = ListItemDefaults.colors(
             containerColor = if (isCurrent) {
