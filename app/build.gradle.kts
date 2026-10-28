@@ -25,7 +25,7 @@ android {
         minSdk = 26
         targetSdk = 37
         versionCode = gitCommitCount
-        versionName = "0.1.0"
+        versionName = "1.0.11"
     }
 
     signingConfigs {
