@@ -80,6 +80,7 @@ import com.tuneplayer.app.ui.components.NowPlayingSheet
 import com.tuneplayer.app.ui.components.SleepTimerDialog
 import com.tuneplayer.app.ui.components.TrackList
 import com.tuneplayer.app.ui.screens.BrowseScreen
+import com.tuneplayer.app.ui.screens.DetailScreen
 import com.tuneplayer.app.ui.screens.DownloadsScreen
 import com.tuneplayer.app.ui.Screens
 import com.tuneplayer.app.ui.screens.FavoritesScreen
@@ -524,10 +525,23 @@ fun TunePlayerScreen(
                     onShare = { track -> shareTrack(context, track) },
                 )
 
-                // Detail routes "artist:<browseId>" / "album:<browseId>".
+                Screens.Downloads.route -> DownloadsScreen(
+                    tracks = state.downloadedTracks,
+                    totalBytes = state.downloadTotalBytes,
+                    favoriteIds = state.favoriteIds,
+                    onPlay = viewModel::play,
+                    onPlayNext = viewModel::playNext,
+                    onToggleFavorite = viewModel::toggleFavorite,
+                    onShare = { track -> shareTrack(context, track) },
+                    onPlayAll = { viewModel.playTracks(state.downloadedTracks) },
+                    onShuffleAll = { viewModel.shuffleTracks(state.downloadedTracks) },
+                    onClearAll = viewModel::clearDownloads,
+                    listState = downloadsListState,
+                )
+
+                // Detail / category routes "artist:<id>" / "album:<id>" / "category:<id>".
                 else -> when {
                     currentRoute.startsWith("artist:") || currentRoute.startsWith("album:") -> {
-                        val browseId = currentRoute.substringAfter(":")
                         DetailScreen(
                             title = state.detailTitle.ifEmpty { currentRoute.substringBefore(":") },
                             tracks = state.detailTracks,
@@ -586,20 +600,6 @@ fun TunePlayerScreen(
                         onShare = { track -> shareTrack(context, track) },
                     )
                 }
-
-                Screens.Downloads.route -> DownloadsScreen(
-                    tracks = state.downloadedTracks,
-                    totalBytes = state.downloadTotalBytes,
-                    favoriteIds = state.favoriteIds,
-                    onPlay = viewModel::play,
-                    onPlayNext = viewModel::playNext,
-                    onToggleFavorite = viewModel::toggleFavorite,
-                    onShare = { track -> shareTrack(context, track) },
-                    onPlayAll = { viewModel.playTracks(state.downloadedTracks) },
-                    onShuffleAll = { viewModel.shuffleTracks(state.downloadedTracks) },
-                    onClearAll = viewModel::clearDownloads,
-                    listState = downloadsListState,
-                )
                 }
             }
         }
