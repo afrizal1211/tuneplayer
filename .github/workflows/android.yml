@@ -31,7 +31,7 @@ jobs:
           distribution: "temurin"
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v4
+        uses: android-actions/setup-android@v5
         with:
           api-level: 37
           build-tools-version: 37.0.0
@@ -70,7 +70,7 @@ jobs:
           distribution: "temurin"
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v4
+        uses: android-actions/setup-android@v5
         with:
           api-level: 37
           build-tools-version: 37.0.0
@@ -131,7 +131,7 @@ jobs:
           distribution: "temurin"
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v4
+        uses: android-actions/setup-android@v5
         with:
           api-level: 37
           build-tools-version: 37.0.0
