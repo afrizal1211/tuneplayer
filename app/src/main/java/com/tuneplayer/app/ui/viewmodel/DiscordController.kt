@@ -11,7 +11,9 @@ import com.tuneplayer.app.data.discord.derivePlaybackSemanticState
 import com.tuneplayer.app.data.discord.deriveRawDiscordPresenceDecision
 import com.tuneplayer.app.data.discord.resolveDiscordPresenceDecision
 import com.tuneplayer.app.data.model.Track
+import com.tuneplayer.app.log.LogCatcher
 import com.tuneplayer.app.ui.TunePlayerViewModel
+import com.tuneplayer.app.ui.TunePlayerViewModel.Companion.TAG
 import com.tuneplayer.app.widget.NowPlayingWidget
 import kotlinx.coroutines.launch
 import org.json.JSONObject
