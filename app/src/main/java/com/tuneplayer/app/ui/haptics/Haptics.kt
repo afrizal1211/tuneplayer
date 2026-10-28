@@ -386,6 +386,7 @@ private object TouchVibration {
         .build()
 
     fun send(vibrator: Vibrator, effect: VibrationEffect) {
-        vibrator.vibrate(effect, attributes)
+        runCatching { vibrator.vibrate(effect, attributes) }
+            .onFailure { /* VIBRATE permission denied or device has no vibrator */ }
     }
 }
