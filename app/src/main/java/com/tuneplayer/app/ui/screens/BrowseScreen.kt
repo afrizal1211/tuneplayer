@@ -23,6 +23,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -49,6 +50,7 @@ internal fun BrowseScreen(
     onShare: (Track) -> Unit,
     onOpenArtist: (Track) -> Unit = {},
     onOpenAlbum: (Track) -> Unit = {},
+    onOpenCategory: (browseId: String, label: String) -> Unit = { _, _ -> },
     onPlayShelf: (List<Track>) -> Unit,
 ) {
     if (isLoading && shelves.isEmpty()) {
@@ -72,6 +74,18 @@ internal fun BrowseScreen(
             .verticalScroll(rememberScrollState())
             .padding(vertical = 8.dp),
     ) {
+        // Top-level browse categories; long-press a track still opens artist/album.
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            CategoryChip("FEmusic_charts", "Charts", onOpenCategory)
+            CategoryChip("FEmusic_explore", "Explore", onOpenCategory)
+            CategoryChip("FEmusic_moods_and_genres", "Moods & Genres", onOpenCategory)
+        }
         shelves.forEachIndexed { index, shelf ->
             Text(
                 text = shelf.title.ifEmpty { stringResource(R.string.browse_for_you) },
@@ -203,6 +217,29 @@ private fun ShelfRail(
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun CategoryChip(
+    browseId: String,
+    label: String,
+    onOpen: (String, String) -> Unit,
+) {
+    Surface(
+        onClick = { onOpen(browseId, label) },
+        shape = RoundedCornerShape(50),
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        modifier = Modifier.height(36.dp),
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                modifier = Modifier.padding(horizontal = 16.dp),
+            )
         }
     }
 }

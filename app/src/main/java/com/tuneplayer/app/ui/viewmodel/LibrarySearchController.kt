@@ -138,6 +138,26 @@ internal fun TunePlayerViewModel.loadDetailTracks(browseId: String, title: Strin
     }
 }
 
+/**
+ * Shelves for a browse category (Charts, Explore, Mood & Genres).
+ * Route "category:<browseId>" opens it; title is the human label.
+ */
+internal fun TunePlayerViewModel.loadBrowseCategory(browseId: String, title: String) {
+    if (uiState.isLoadingCategory) return
+    uiState = uiState.copy(isLoadingCategory = true, categoryTitle = title)
+    viewModelScope.launch {
+        try {
+            val shelves = youTubeRepository.browseShelves(browseId)
+            uiState = uiState.copy(categoryShelves = shelves, isLoadingCategory = false)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            LogCatcher.d(TAG, "browse category failed: ${error.message}")
+            uiState = uiState.copy(isLoadingCategory = false)
+        }
+    }
+}
+
 internal fun TunePlayerViewModel.scheduleSearchSuggestions(rawQuery: String) {
     searchSuggestionsJob?.cancel()
     val query = rawQuery.trim()

@@ -306,6 +306,19 @@ class YouTubeMusicRepository {
             .take(limit)
     }
 
+    /** Shelves for a browse page: Charts, Explore, Mood & Genres, etc. */
+    suspend fun browseShelves(browseId: String, maxShelves: Int = 8, perShelf: Int = 12): List<YouTubeHomeShelf> {
+        val response = innerTube
+            .browse(client = YouTubeClient.WEB_REMIX, browseId = browseId)
+            .body<JsonObject>()
+        val shelves = mutableListOf<HomeShelf>()
+        collectHomeShelves(response, shelves)
+        return shelves
+            .map { shelf -> YouTubeHomeShelf(title = shelf.title, tracks = shelf.tracks.take(perShelf)) }
+            .filter { it.tracks.isNotEmpty() }
+            .take(maxShelves)
+    }
+
     private fun collectHomeShelves(element: JsonElement, output: MutableList<HomeShelf>) {
         when (element) {
             is JsonObject -> {

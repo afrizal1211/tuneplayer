@@ -139,6 +139,10 @@ data class TunePlayerUiState(
     val detailTracks: List<Track> = emptyList(),
     val detailTitle: String = "",
     val isLoadingDetail: Boolean = false,
+    /** Shelves of a browsed category (Charts/Explore/Moods); route holds the browseId. */
+    val categoryShelves: List<com.tuneplayer.app.data.youtube.YouTubeHomeShelf> = emptyList(),
+    val categoryTitle: String = "",
+    val isLoadingCategory: Boolean = false,
     val lyricsOffsetMs: Long = 0L,
     val lyricsSource: LyricsSource? = null,
     val downloadedTracks: List<Track> = emptyList(),
