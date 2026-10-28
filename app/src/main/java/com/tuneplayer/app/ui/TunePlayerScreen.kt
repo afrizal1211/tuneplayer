@@ -109,7 +109,7 @@ import com.tuneplayer.app.ui.util.formatSpeed
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TunePlayerScreen(
-    initialRoute: String = Screens.Library.route,
+    initialRoute: String = Screens.Home.route,
     viewModel: TunePlayerViewModel = viewModel(),
 ) {
     val state = viewModel.uiState
@@ -142,7 +142,7 @@ fun TunePlayerScreen(
     // Route-based navigation matching ArchiveTune's NavHost pattern.
     // Back stack replaces the old comma-joined int CSV.
     var backStackRoutes by rememberSaveable { mutableStateOf(listOf(initialRoute)) }
-    val currentRoute = backStackRoutes.lastOrNull() ?: Screens.Library.route
+    val currentRoute = backStackRoutes.lastOrNull() ?: Screens.Home.route
     val navigateTo: (String) -> Unit = { route ->
         if (route != currentRoute) backStackRoutes = backStackRoutes + route
     }
@@ -150,7 +150,7 @@ fun TunePlayerScreen(
         backStackRoutes = backStackRoutes.dropLast(1)
     }
     LaunchedEffect(currentRoute) {
-        if (currentRoute == Screens.Browse.route) viewModel.loadHomeRecommendations()
+        if (currentRoute == Screens.Home.route) viewModel.loadHomeRecommendations()
         if (currentRoute.startsWith("artist:") || currentRoute.startsWith("album:")) {
             val browseId = currentRoute.substringAfter(":")
             val title = currentRoute.substringBefore(":")
@@ -195,7 +195,7 @@ fun TunePlayerScreen(
         LocalRemoveDownload provides viewModel::removeDownload,
     ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
-    val currentScreen = Screens.byRoute(currentRoute) ?: Screens.Library
+    val currentScreen = Screens.byRoute(currentRoute) ?: Screens.Home
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
@@ -285,7 +285,7 @@ fun TunePlayerScreen(
                         )
                     }
                     navItem(Screens.Library, R.string.tab_library)
-                    navItem(Screens.Browse, R.string.tab_browse)
+                    navItem(Screens.Home, R.string.tab_home)
                     navItem(Screens.Search, R.string.tab_youtube)
                     navItem(Screens.Queue, R.string.tab_queue)
                     navItem(Screens.Liked, R.string.tab_liked)
@@ -366,7 +366,7 @@ fun TunePlayerScreen(
                         onShare = { track -> shareTrack(context, track) },
                     )
 
-                    Screens.Browse.route -> BrowseScreen(
+                    Screens.Home.route -> BrowseScreen(
                         shelves = state.homeShelves,
                         isLoading = state.isLoadingHomeRecommendations,
                         favoriteIds = state.favoriteIds,

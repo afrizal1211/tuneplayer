@@ -14,7 +14,7 @@ import com.tuneplayer.app.ui.theme.TunePlayerTheme
 class MainActivity : ComponentActivity() {
 
     /** Deep-link target route, consumed by the screen's initial navigation state. */
-    private val initialRoute = mutableStateOf(Screens.Library.route)
+    private val initialRoute = mutableStateOf(Screens.Home.route)
 
     private fun rememberTab(intent: android.content.Intent?) {
         initialRoute.value = routeForIntent(intent)
@@ -26,7 +26,7 @@ class MainActivity : ComponentActivity() {
             TAB_YOUTUBE -> Screens.Search.route
             TAB_QUEUE -> Screens.Queue.route
             TAB_LIKED -> Screens.Liked.route
-            else -> Screens.Library.route
+            else -> Screens.Home.route
         }
 
     override fun onNewIntent(intent: android.content.Intent) {

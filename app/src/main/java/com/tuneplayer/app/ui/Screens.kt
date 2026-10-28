@@ -40,11 +40,11 @@ sealed class Screens(
         unselectedIcon = Icons.Outlined.LibraryMusic,
     )
 
-    data object Browse : Screens(
-        route = "browse",
-        titleId = R.string.tab_browse,
+    data object Home : Screens(
+        route = "home",
+        titleId = R.string.tab_home,
         selectedIcon = Icons.Filled.Home,
-        unselectedIcon = Icons.Filled.Home,
+        unselectedIcon = Icons.Outlined.Home,
     )
 
     data object Search : Screens(
@@ -105,13 +105,13 @@ sealed class Screens(
 
     companion object {
         /** Bottom bar shows these; the rest open through the More sheet. */
-        val mainItems = listOf(Library, Browse, Search, Queue, Liked)
+        val mainItems = listOf(Library, Home, Search, Queue, Liked)
 
         /** Everything reachable from the More sheet. */
         val overflowItems = listOf(History, Playlists, Downloads, Stats, Settings)
 
         val all by lazy {
-            listOf(Library, Browse, Search, Queue, Liked, History, Playlists, Stats, Downloads, Settings)
+            listOf(Library, Home, Search, Queue, Liked, History, Playlists, Stats, Downloads, Settings)
         }
 
         fun byRoute(route: String): Screens? = all.firstOrNull { it.route == route }

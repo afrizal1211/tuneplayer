@@ -4,8 +4,8 @@
     <string name="widget_open_player">TunePlayerを開く</string>
 
     <string name="tab_library">ライブラリ</string>
+    <string name="tab_home">ホーム</string>
     <string name="tab_youtube">YouTube</string>
-    <string name="tab_browse">ブラウズ</string>
     <string name="tab_more">その他</string>
     <string name="tab_queue">キュー</string>
     <string name="tab_liked">お気に入り</string>
