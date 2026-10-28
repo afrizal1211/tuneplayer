@@ -418,7 +418,7 @@ class YouTubeMusicRepository {
     /** Parses musicTwoRowItemRenderer — the compact card used in browse home shelves. */
     private fun parseTrackRendererTwoRow(rendererJson: JsonObject): Track? =
         runCatching {
-            val twoRow = rendererJson["musicTwoRowItemRenderer"] as? JsonObject ?: ""
+            val twoRow = rendererJson["musicTwoRowItemRenderer"] as? JsonObject ?: return null
             val titleRuns = (twoRow["title"] as? JsonObject)?.get("runs") as? JsonArray
             val title = titleRuns?.firstOrNull()
                 ?.let { (it as? JsonObject)?.get("text")?.jsonPrimitive?.contentOrNull }
