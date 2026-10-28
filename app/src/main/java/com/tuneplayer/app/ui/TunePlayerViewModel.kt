@@ -244,7 +244,10 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
                 if (connected && !wasConnected) {
                     // Registration is a network call, so it must not block the
                     // flow collector; a second coroutine keeps the collect hot.
-                    viewModelScope.launch { updateDiscordPresence() }
+                    viewModelScope.launch {
+                        runCatching { updateDiscordPresence() }
+                            .onFailure { LogCatcher.w(TAG, "Discord presence failed", it) }
+                    }
                 }
             }
         }

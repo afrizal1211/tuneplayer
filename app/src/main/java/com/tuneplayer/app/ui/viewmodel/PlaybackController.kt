@@ -52,8 +52,10 @@ internal fun TunePlayerViewModel.startPositionPolling() {
                 val idx = activeLineIndex(lines, position)
                 val word = if (idx == uiState.activeLyricIndex) {
                     uiState.activeWordIndex
-                } else {
+                } else if (idx in lines.indices) {
                     activeWordIndex(lines[idx], position)
+                } else {
+                    -1
                 }
                 val rows = activeLyricRows(lines, position)
                 if (idx != uiState.activeLyricIndex || rows != uiState.activeLyricRows) {
@@ -81,7 +83,10 @@ internal fun TunePlayerViewModel.seekTo(positionMs: Long) {
     player.seekTo(target)
     LogCatcher.d(TAG, "seekTo ${target}ms")
     uiState = uiState.copy(positionMs = target)
-    viewModelScope.launch { updateDiscordPresence() }
+    viewModelScope.launch {
+        runCatching { updateDiscordPresence() }
+            .onFailure { LogCatcher.w(TAG, "Discord presence failed", it) }
+    }
 }
 
 internal fun TunePlayerViewModel.advanceAfterTrackEnded() {

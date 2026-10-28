@@ -327,7 +327,14 @@ class YouTubeMusicRepository {
         }?.trim().orEmpty()
     }
 
-    private fun parseTrackRenderer(rendererJson: JsonObject): Track? =
+    private fun parseTrackRenderer(rendererJson: JsonObject): Track? {
+        // Try musicResponsiveListItemRenderer first (search results, browse rows).
+        parseTrackRendererResponsive(rendererJson)?.let { return it }
+        // Fallback: musicTwoRowItemRenderer (home feed carousel items).
+        return parseTrackRendererTwoRow(rendererJson)
+    }
+
+    private fun parseTrackRendererResponsive(rendererJson: JsonObject): Track? =
         runCatching {
             val renderer = json.decodeFromJsonElement<MusicResponsiveListItemRenderer>(rendererJson)
             val columns = renderer.flexColumns.mapNotNull {
@@ -362,6 +369,51 @@ class YouTubeMusicRepository {
                 artist = artist,
                 durationMs = duration,
                 artworkUri = artwork,
+                videoId = videoId,
+                isLocal = false,
+            )
+        }.getOrNull()
+
+    /** Parses musicTwoRowItemRenderer — the compact card used in browse home shelves. */
+    private fun parseTrackRendererTwoRow(rendererJson: JsonObject): Track? =
+        runCatching {
+            val twoRow = rendererJson["musicTwoRowItemRenderer"] as? JsonObject ?: return@runCatching null
+            val titleRuns = (twoRow["title"] as? JsonObject)?.get("runs") as? JsonArray
+            val title = titleRuns?.firstOrNull()
+                ?.let { (it as? JsonObject)?.get("text")?.jsonPrimitive?.contentOrNull }
+                ?.trim()
+                ?.takeIf { it.isNotBlank() }
+                ?: return@runCatching null
+            val subtitleRuns = (twoRow["subtitle"] as? JsonObject)?.get("runs") as? JsonArray
+            val subtitleTexts = subtitleRuns.orEmpty().mapNotNull {
+                (it as? JsonObject)?.get("text")?.jsonPrimitive?.contentOrNull?.trim()
+            }.filter { it.isNotBlank() }
+            val artist = subtitleTexts.firstOrNull { text ->
+                !isSuggestionMetadata(text) &&
+                    parseDurationMs(text) == null &&
+                    !text.contains("views", ignoreCase = true) &&
+                    !text.contains("plays", ignoreCase = true)
+            } ?: "Unknown artist"
+            val videoId = ((twoRow["navigationEndpoint"] as? JsonObject)
+                ?.get("watchEndpoint") as? JsonObject)
+                ?.get("videoId")
+                ?.jsonPrimitive?.contentOrNull
+                ?: return@runCatching null
+            val artwork = ((twoRow["thumbnail"] as? JsonObject)
+                ?.get("musicThumbnailRenderer") as? JsonObject)
+                ?.get("thumbnail") as? JsonObject
+            val thumbs = (artwork?.get("thumbnails") as? JsonArray)
+            val artworkUrl = thumbs?.lastOrNull()
+                ?.let { (it as? JsonObject)?.get("url")?.jsonPrimitive?.contentOrNull }
+                ?: ""
+            val duration = subtitleTexts.mapNotNull(::parseDurationMs).firstOrNull() ?: 0L
+
+            Track(
+                id = "yt:$videoId",
+                title = title,
+                artist = artist,
+                durationMs = duration,
+                artworkUri = artworkUrl,
                 videoId = videoId,
                 isLocal = false,
             )
@@ -505,7 +557,10 @@ class YouTubeMusicRepository {
     }
 
     private fun collectRenderersDeep(element: JsonElement, output: MutableList<JsonObject>) {
+        // Home feed uses musicResponsiveListItemRenderer (search results) AND
+        // musicTwoRowItemRenderer (browse shelves) — collect both.
         collectNamedRenderers(element, "musicResponsiveListItemRenderer", output)
+        collectNamedRenderers(element, "musicTwoRowItemRenderer", output)
     }
 
     private fun collectNamedRenderers(
@@ -664,7 +719,7 @@ class YouTubeMusicRepository {
                 }.headers[HttpHeaders.ContentLength]?.toLongOrNull()
             }.getOrNull()
         } ?: return@withContext null
-        (lengthBytes * 8 / durationMs).toInt()
+        (lengthBytes * 8 / durationMs).toInt().coerceIn(1, Int.MAX_VALUE)
     }
 
     /**

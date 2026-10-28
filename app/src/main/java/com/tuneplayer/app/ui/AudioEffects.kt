@@ -81,7 +81,7 @@ object AudioEffects {
             val count = eq.numberOfBands.toInt()
             if (count <= 0) return@runCatching
             val resampled = if (levels.size == count) levels else EqPresets.resample(levels, count)
-            val range = eq.bandLevelRange
+            val range = eq.bandLevelRange ?: return@runCatching
             val min = range[0].toInt()
             val max = range[1].toInt()
             resampled.forEachIndexed { index, level ->

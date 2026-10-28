@@ -180,7 +180,7 @@ internal fun TunePlayerViewModel.applyLyrics(trackId: String, lookup: LyricsLook
     val position = (uiState.positionMs - uiState.lyricsOffsetMs).coerceAtLeast(0L)
     val active = if (synced.isEmpty()) -1 else activeLineIndex(synced, position)
     val rows = activeLyricRows(synced, position)
-    val word = if (active >= 0) activeWordIndex(synced[active], position) else -1
+    val word = if (active in synced.indices) activeWordIndex(synced[active], position) else -1
     uiState = uiState.copy(
         isLoadingLyrics = false,
         lyrics = lookup.text,

@@ -22,14 +22,20 @@ internal fun TunePlayerViewModel.setDiscordRpcEnabled(enabled: Boolean) {
     app.settingsStore.discordRpcEnabled = enabled
     uiState = uiState.copy(discordRpcEnabled = enabled)
     app.syncDiscordRpc()
-    viewModelScope.launch { updateDiscordPresence() }
+    viewModelScope.launch {
+        runCatching { updateDiscordPresence() }
+            .onFailure { LogCatcher.w(TAG, "Discord presence failed", it) }
+    }
 }
 
 /** Keep or drop the card while paused, independent of the enable toggle. */
 internal fun TunePlayerViewModel.setDiscordShowWhenPaused(show: Boolean) {
     app.settingsStore.discordShowWhenPaused = show
     uiState = uiState.copy(discordShowWhenPaused = show)
-    viewModelScope.launch { updateDiscordPresence() }
+    viewModelScope.launch {
+        runCatching { updateDiscordPresence() }
+            .onFailure { LogCatcher.w(TAG, "Discord presence failed", it) }
+    }
 }
 
 /** Saving a token also opts in, matching the single dialog that collects it. */
@@ -40,7 +46,10 @@ internal fun TunePlayerViewModel.saveDiscordToken(token: String) {
     app.settingsStore.discordRpcEnabled = true
     uiState = uiState.copy(discordRpcEnabled = true, discordTokenSaved = true)
     app.syncDiscordRpc()
-    viewModelScope.launch { updateDiscordPresence() }
+    viewModelScope.launch {
+        runCatching { updateDiscordPresence() }
+            .onFailure { LogCatcher.w(TAG, "Discord presence failed", it) }
+    }
 }
 
 internal fun TunePlayerViewModel.removeDiscordToken() {
@@ -66,14 +75,20 @@ internal fun TunePlayerViewModel.saveDiscordApplicationId(applicationId: String)
     app.settingsStore.discordApplicationId = digits
     DiscordAssetRegistrar.invalidate()
     uiState = uiState.copy(discordApplicationId = digits)
-    viewModelScope.launch { updateDiscordPresence() }
+    viewModelScope.launch {
+        runCatching { updateDiscordPresence() }
+            .onFailure { LogCatcher.w(TAG, "Discord presence failed", it) }
+    }
 }
 
 internal fun TunePlayerViewModel.removeDiscordApplicationId() {
     app.settingsStore.discordApplicationId = null
     DiscordAssetRegistrar.invalidate()
     uiState = uiState.copy(discordApplicationId = null)
-    viewModelScope.launch { updateDiscordPresence() }
+    viewModelScope.launch {
+        runCatching { updateDiscordPresence() }
+            .onFailure { LogCatcher.w(TAG, "Discord presence failed", it) }
+    }
 }
 
 /**
@@ -214,5 +229,8 @@ internal suspend fun TunePlayerViewModel.buildDiscordActivity(track: Track, isPa
 internal fun TunePlayerViewModel.publishWidgetState() {
     val track = uiState.currentTrack
     NowPlayingWidget.publish(app, track?.title, track?.artist, uiState.isPlaying)
-    viewModelScope.launch { updateDiscordPresence() }
+    viewModelScope.launch {
+        runCatching { updateDiscordPresence() }
+            .onFailure { LogCatcher.w(TAG, "Discord presence failed", it) }
+    }
 }
