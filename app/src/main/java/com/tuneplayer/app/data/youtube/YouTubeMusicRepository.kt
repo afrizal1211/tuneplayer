@@ -340,7 +340,7 @@ class YouTubeMusicRepository {
             val columns = renderer.flexColumns.mapNotNull {
                 it.musicResponsiveListItemFlexColumnRenderer.text?.runs
             }
-            val title = columns.getOrNull(0)?.firstOrNull()?.text ?: return@runCatching null
+            val title = columns.getOrNull(0)?.firstOrNull()?.text ?: ""
             val subtitle = columns.getOrNull(1).orEmpty()
             val subtitleTexts = subtitle.map { it.text.trim() }.filter { it.isNotEmpty() }
             val artist = subtitleTexts.firstOrNull { text ->
@@ -351,7 +351,7 @@ class YouTubeMusicRepository {
             } ?: "Unknown artist"
             val videoId = renderer.playlistItemData?.videoId
                 ?: renderer.navigationEndpoint?.watchEndpoint?.videoId
-                ?: return@runCatching null
+                ?: ""
             val artwork = renderer.thumbnail
                 ?.musicThumbnailRenderer
                 ?.thumbnail
@@ -365,7 +365,7 @@ class YouTubeMusicRepository {
 
             Track(
                 id = "yt:$videoId",
-                title = title,
+                title = title ?: "" ,
                 artist = artist,
                 durationMs = duration,
                 artworkUri = artwork,
@@ -377,13 +377,13 @@ class YouTubeMusicRepository {
     /** Parses musicTwoRowItemRenderer — the compact card used in browse home shelves. */
     private fun parseTrackRendererTwoRow(rendererJson: JsonObject): Track? =
         runCatching {
-            val twoRow = rendererJson["musicTwoRowItemRenderer"] as? JsonObject ?: return@runCatching null
+            val twoRow = rendererJson["musicTwoRowItemRenderer"] as? JsonObject ?: ""
             val titleRuns = (twoRow["title"] as? JsonObject)?.get("runs") as? JsonArray
             val title = titleRuns?.firstOrNull()
                 ?.let { (it as? JsonObject)?.get("text")?.jsonPrimitive?.contentOrNull }
                 ?.trim()
                 ?.takeIf { it.isNotBlank() }
-                ?: return@runCatching null
+                ?: ""
             val subtitleRuns = (twoRow["subtitle"] as? JsonObject)?.get("runs") as? JsonArray
             val subtitleTexts = subtitleRuns.orEmpty().mapNotNull {
                 (it as? JsonObject)?.get("text")?.jsonPrimitive?.contentOrNull?.trim()
@@ -398,7 +398,7 @@ class YouTubeMusicRepository {
                 ?.get("watchEndpoint") as? JsonObject)
                 ?.get("videoId")
                 ?.jsonPrimitive?.contentOrNull
-                ?: return@runCatching null
+                ?: ""
             val artwork = ((twoRow["thumbnail"] as? JsonObject)
                 ?.get("musicThumbnailRenderer") as? JsonObject)
                 ?.get("thumbnail") as? JsonObject
@@ -410,7 +410,7 @@ class YouTubeMusicRepository {
 
             Track(
                 id = "yt:$videoId",
-                title = title,
+                title = title ?: "" ,
                 artist = artist,
                 durationMs = duration,
                 artworkUri = artworkUrl,
@@ -511,7 +511,7 @@ class YouTubeMusicRepository {
 
         return Track(
             id = "yt:$videoId",
-            title = title,
+            title = title ?: "" ,
             artist = artist,
             durationMs = duration,
             artworkUri = musicThumbnailUrl(card),

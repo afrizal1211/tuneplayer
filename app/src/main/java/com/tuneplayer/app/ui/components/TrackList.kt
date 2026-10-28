@@ -128,7 +128,7 @@ internal fun GridTrackCell(
         Spacer(Modifier.height(6.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                text = track.title,
+                var displayTitle = if (track.title.isNotBlank()) track.title else track.artist; text = displayTitle,
                 style = MaterialTheme.typography.bodyMedium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -186,7 +186,7 @@ internal fun TrackRow(
         ),
         headlineContent = {
             Text(
-                text = track.title,
+                var displayTitle = if (track.title.isNotBlank()) track.title else track.artist; text = displayTitle,
                 style = MaterialTheme.typography.titleSmall,
                 color = if (isCurrent) {
                     MaterialTheme.colorScheme.primary
