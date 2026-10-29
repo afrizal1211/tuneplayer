@@ -78,8 +78,11 @@ internal fun TunePlayerViewModel.updateQuery(query: String) {
         searchCommitted = if (changed) false else uiState.searchCommitted,
         isSearching = if (changed) false else uiState.isSearching,
         error = if (changed) null else uiState.error,
-        searchSuggestions = if (changed) emptyList() else uiState.searchSuggestions,
-        searchRecommendations = if (changed) emptyList() else uiState.searchRecommendations,
+        // Keep the previous suggestions on screen while the debounced fetch
+        // runs: clearing here blanks the list on every keystroke, so the
+        // suggestions are invisible whenever the user types continuously.
+        searchSuggestions = if (query.isBlank()) emptyList() else uiState.searchSuggestions,
+        searchRecommendations = if (query.isBlank()) emptyList() else uiState.searchRecommendations,
     )
     scheduleSearchSuggestions(query)
     if (query.isBlank()) loadHomeRecommendations()
@@ -194,11 +197,21 @@ internal fun TunePlayerViewModel.scheduleSearchSuggestions(rawQuery: String) {
                     searchRecommendations = suggestions.tracks,
                     isLoadingSuggestions = false,
                 )
+                LogCatcher.i(
+                    TAG,
+                    "Suggestions for '$query': ${suggestions.queries.size} queries, " +
+                        "${suggestions.tracks.size} tracks — applied",
+                )
+            } else {
+                LogCatcher.i(
+                    TAG,
+                    "Suggestions for '$query' dropped: query now '${uiState.query.trim()}'",
+                )
             }
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (error: Exception) {
-            LogCatcher.d(TAG, "YouTube suggestions failed: ${error.message}")
+            LogCatcher.e(TAG, "YouTube suggestions failed: ${error.message}", error)
             if (uiState.query.trim() == query) {
                 uiState = uiState.copy(
                     searchSuggestions = emptyList(),

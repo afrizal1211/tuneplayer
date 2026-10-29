@@ -242,11 +242,25 @@ class YouTubeMusicRepository {
         val query = input.trim()
         if (query.isEmpty()) return YouTubeSearchSuggestions()
 
+        // A stale or account-bound session can make the signed-in endpoint fail
+        // or return an empty shell. Guests always get suggestions, so retry
+        // without login before giving up.
+        val signedInResult = if (signedIn) {
+            runCatching { fetchSuggestions(query, setLogin = true) }.getOrNull()
+        } else {
+            null
+        }
+        val parsed = signedInResult?.takeIf { it.queries.isNotEmpty() || it.tracks.isNotEmpty() }
+            ?: fetchSuggestions(query, setLogin = false)
+        return parsed
+    }
+
+    private suspend fun fetchSuggestions(query: String, setLogin: Boolean): YouTubeSearchSuggestions {
         val response = innerTube
             .getSearchSuggestions(
                 client = YouTubeClient.WEB_REMIX,
                 input = query,
-                setLogin = signedIn,
+                setLogin = setLogin,
             )
             .body<GetSearchSuggestionsResponse>()
 

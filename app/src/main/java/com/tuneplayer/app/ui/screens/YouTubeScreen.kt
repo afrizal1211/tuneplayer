@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.NorthWest
+import com.tuneplayer.app.log.LogCatcher
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.CircularProgressIndicator
@@ -142,6 +143,11 @@ internal fun YouTubeScreen(
             Spacer(Modifier.height(8.dp))
         }
 
+        LogCatcher.i(
+            "TunePlayerVM",
+            "Search UI: query='$query' committed=$searchCommitted suggestions=${suggestions.size} " +
+                "recs=${recommendations.size} loadingSugg=$isLoadingSuggestions homeRecs=${homeRecommendations.size}",
+        )
         when {
             query.isEmpty() && homeRecommendations.isNotEmpty() -> {
                 SearchSuggestionList(
@@ -171,7 +177,7 @@ internal fun YouTubeScreen(
                 )
             }
 
-            !searchCommitted && isLoadingSuggestions -> {
+            !searchCommitted && isLoadingSuggestions && suggestions.isEmpty() && recommendations.isEmpty() -> {
                 SearchLoading()
             }
 
