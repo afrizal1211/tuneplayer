@@ -202,7 +202,7 @@ private fun ShelfRail(
                         .size(140.dp),
                 )
                 Text(
-                    text = track.title,
+                    text = track.title.ifBlank { track.artist },
                     style = MaterialTheme.typography.bodySmall,
                     fontWeight = FontWeight.Medium,
                     maxLines = 1,

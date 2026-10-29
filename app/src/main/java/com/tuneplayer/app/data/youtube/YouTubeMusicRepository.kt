@@ -9,7 +9,6 @@ import com.metrolist.innertubex.extraction.StreamResolveException
 import com.metrolist.innertubex.extraction.ContentHints
 import com.metrolist.innertubex.extraction.InnerTubeExtractor
 import com.metrolist.innertubex.extraction.YtConfigParserImpl
-import com.metrolist.innertubex.models.MusicResponsiveListItemRenderer
 import com.metrolist.innertubex.models.YouTubeClient
 import com.metrolist.innertubex.models.response.GetSearchSuggestionsResponse
 import com.tuneplayer.app.data.model.AudioInfo
@@ -40,7 +39,6 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.decodeFromJsonElement
 
 data class ResolvedAudio(
     val url: String,
@@ -365,46 +363,59 @@ class YouTubeMusicRepository {
 
     private fun parseTrackRendererResponsive(rendererJson: JsonObject): Track? =
         runCatching {
-            val renderer = json.decodeFromJsonElement<MusicResponsiveListItemRenderer>(rendererJson)
-            val columns = renderer.flexColumns.mapNotNull {
-                it.musicResponsiveListItemFlexColumnRenderer.text?.runs
+            val renderer = rendererJson["musicResponsiveListItemRenderer"] as? JsonObject
+                ?: return@runCatching null
+            val columns = (renderer["flexColumns"] as? JsonArray).orEmpty().mapNotNull { column ->
+                val text = ((column as? JsonObject)
+                    ?.get("musicResponsiveListItemFlexColumnRenderer") as? JsonObject)
+                    ?.get("text") as? JsonObject
+                (text?.get("runs") as? JsonArray).orEmpty().mapNotNull { run ->
+                    (run as? JsonObject)?.get("text")?.jsonPrimitive?.contentOrNull?.trim()
+                }.filter { it.isNotBlank() }
             }
-            val title = columns.getOrNull(0)?.firstOrNull()?.text ?: ""
-            val subtitle = columns.getOrNull(1).orEmpty()
-            val subtitleTexts = subtitle.map { it.text.trim() }.filter { it.isNotEmpty() }
+            val title = columns.getOrNull(0).orEmpty().joinToString(" ")
+                .takeIf { it.isNotBlank() } ?: ""
+            val subtitleTexts = columns.getOrNull(1).orEmpty()
             val artist = subtitleTexts.firstOrNull { text ->
                 !isSuggestionMetadata(text) &&
                     parseDurationMs(text) == null &&
                     !text.contains("views", ignoreCase = true) &&
                     !text.contains("plays", ignoreCase = true)
             } ?: "Unknown artist"
-            val videoId = renderer.playlistItemData?.videoId
-                ?: renderer.navigationEndpoint?.watchEndpoint?.videoId
+            val videoId = ((renderer["playlistItemData"] as? JsonObject)
+                ?.get("videoId")?.jsonPrimitive?.contentOrNull)
+                ?: ((renderer["navigationEndpoint"] as? JsonObject)
+                    ?.get("watchEndpoint") as? JsonObject)
+                    ?.get("videoId")?.jsonPrimitive?.contentOrNull
                 ?: ""
-            val artwork = renderer.thumbnail
-                ?.musicThumbnailRenderer
-                ?.thumbnail
-                ?.thumbnails
-                ?.lastOrNull()
-                ?.url
+            val artworkUrl = ((renderer["thumbnail"] as? JsonObject)
+                ?.get("musicThumbnailRenderer") as? JsonObject)
+                ?.get("thumbnail") as? JsonObject
+            val artwork = ((artworkUrl?.get("thumbnails") as? JsonArray)?.lastOrNull()
+                as? JsonObject)?.get("url")?.jsonPrimitive?.contentOrNull
             val duration = subtitleTexts
                 .mapNotNull(::parseDurationMs)
                 .firstOrNull()
                 ?: 0L
-            val artistBrowseId = subtitle.firstNotNullOfOrNull { run ->
-                run.navigationEndpoint?.browseEndpoint?.browseId?.takeIf { id ->
-                    id.startsWith("UC") || id.startsWith("FEmusic_artist")
-                }
-            }
-            val albumBrowseId = subtitle.firstNotNullOfOrNull { run ->
-                run.navigationEndpoint?.browseEndpoint?.browseId?.takeIf { id ->
-                    id.startsWith("MPREb") || id.startsWith("FEmusic_album")
-                }
-            }
+            val subtitleRuns = ((renderer["flexColumns"] as? JsonArray)
+                ?.getOrNull(1) as? JsonObject)
+                ?.get("musicResponsiveListItemFlexColumnRenderer") as? JsonObject
+            val subtitleRunsArray = ((subtitleRuns?.get("text") as? JsonObject)
+                ?.get("runs") as? JsonArray).orEmpty()
+            val artistBrowseId = subtitleRunsArray.firstNotNullOfOrNull { run ->
+                ((run as? JsonObject)?.get("navigationEndpoint") as? JsonObject)
+                    ?.get("browseEndpoint") as? JsonObject
+            }?.get("browseId")?.jsonPrimitive?.contentOrNull
+                ?.takeIf { it.startsWith("UC") || it.startsWith("FEmusic_artist") }
+            val albumBrowseId = subtitleRunsArray.firstNotNullOfOrNull { run ->
+                ((run as? JsonObject)?.get("navigationEndpoint") as? JsonObject)
+                    ?.get("browseEndpoint") as? JsonObject
+            }?.get("browseId")?.jsonPrimitive?.contentOrNull
+                ?.takeIf { it.startsWith("MPREb") || it.startsWith("FEmusic_album") }
 
             Track(
                 id = "yt:$videoId",
-                title = title ?: "" ,
+                title = title,
                 artist = artist,
                 durationMs = duration,
                 artworkUri = artwork,
@@ -420,11 +431,9 @@ class YouTubeMusicRepository {
         runCatching {
             val twoRow = rendererJson["musicTwoRowItemRenderer"] as? JsonObject ?: return null
             val titleRuns = (twoRow["title"] as? JsonObject)?.get("runs") as? JsonArray
-            val title = titleRuns?.firstOrNull()
-                ?.let { (it as? JsonObject)?.get("text")?.jsonPrimitive?.contentOrNull }
-                ?.trim()
-                ?.takeIf { it.isNotBlank() }
-                ?: ""
+            val title = titleRuns.orEmpty().mapNotNull {
+                (it as? JsonObject)?.get("text")?.jsonPrimitive?.contentOrNull
+            }.joinToString(" ").trim().takeIf { it.isNotBlank() } ?: ""
             val subtitleRuns = (twoRow["subtitle"] as? JsonObject)?.get("runs") as? JsonArray
             val subtitleTexts = subtitleRuns.orEmpty().mapNotNull {
                 (it as? JsonObject)?.get("text")?.jsonPrimitive?.contentOrNull?.trim()
