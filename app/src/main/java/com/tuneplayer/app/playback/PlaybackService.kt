@@ -8,6 +8,7 @@ import android.os.SystemClock
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
@@ -61,7 +62,7 @@ class PlaybackService : MediaSessionService() {
 
     private var mediaSession: MediaSession? = null
     private var player: ExoPlayer? = null
-
+    private var playbackErrorHandler: PlaybackErrorHandler? = null
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     private var secondaryPlayer: ExoPlayer? = null
@@ -102,6 +103,16 @@ class PlaybackService : MediaSessionService() {
 
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             if (isPlaying) scheduleCrossfade()
+        }
+
+        override fun onPlayerError(error: PlaybackException) {
+            // YouTube stream URLs are short-lived: a 403 mid-queue is almost
+            // always an expired URL, not a dead track. Re-resolve once; if
+            // that still fails, skip forward instead of stalling the queue.
+            val handler = playbackErrorHandler
+                ?: PlaybackErrorHandler(this@PlaybackService, playerRef = { player })
+                    .also { playbackErrorHandler = it }
+            handler.handle(error)
         }
     }
 
@@ -563,6 +574,8 @@ class PlaybackService : MediaSessionService() {
         settingsStore.unregisterListener(audioSettingsListener)
         tempoWarmJobs.values.forEach { it.cancel() }
         tempoWarmJobs.clear()
+        playbackErrorHandler?.cancel()
+        playbackErrorHandler = null
         player?.removeListener(playerListener)
         cancelCrossfade(resetVolume = false)
         scope.cancel()

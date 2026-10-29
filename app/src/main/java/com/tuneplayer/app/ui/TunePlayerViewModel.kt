@@ -168,7 +168,11 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
     internal val favoriteStore = app.favoriteStore
     internal val queueStore = app.queueStore
     internal val playStatsStore = app.playStatsStore
-    internal val resolvedUris = LinkedHashMap<String, String>()
+    /** Stream URIs are short-lived; LRU-capped, expire with the process. */
+    internal val resolvedUris = object : LinkedHashMap<String, String>(16, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, String>): Boolean =
+            size > MAX_RESOLVED_CACHE
+    }
     /** browseId -> shelves cache for category pages (LRU-ish, capped at 8). */
     internal val categoryCache = LinkedHashMap<String, List<com.tuneplayer.app.data.youtube.YouTubeHomeShelf>>()
     internal var positionPollJob: kotlinx.coroutines.Job? = null
@@ -311,6 +315,9 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
 
     internal var pollTicks = 0
 
+    /** Accumulated real playback time since the last stats flush. */
+    internal var playedTimeAccumulatorMs = 0L
+
 
     /** Local library as the user wants it: filtered, then sorted. */
     val visibleLocalTracks: List<Track>
@@ -357,6 +364,12 @@ class TunePlayerViewModel(application: Application) : AndroidViewModel(applicati
         const val TAG = "TunePlayerVM"
         const val MAX_RESOLVED_CACHE = 50
         const val END_TOLERANCE_MS = 750L
+
+        /** Position poll cadence; must match the delay in startPositionPolling. */
+        const val POLL_INTERVAL_MS = 250L
+
+        /** Flush accumulated play time to Room this often. */
+        const val PLAY_TIME_FLUSH_MS = 15_000L
         const val MAX_DISCORD_TEXT = 128
     }
 

@@ -27,6 +27,8 @@ import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.compression.ContentEncoding
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.serialization.kotlinx.json.json
+import com.tuneplayer.app.log.LogCatcher
+import kotlinx.coroutines.delay
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -108,6 +110,9 @@ class YouTubeMusicRepository {
 
         /** How long a stream probe may take before the URL is written off. */
         private const val PROBE_TIMEOUT_MS = 4_000L
+
+        /** Home feed TTL cache: refreshed every 30 minutes. */
+        private const val HOME_CACHE_TTL_MS = 30 * 60_000L
     }
 
     private val json = Json {
@@ -115,6 +120,10 @@ class YouTubeMusicRepository {
         isLenient = true
         explicitNulls = false
     }
+
+    /** Home feed cache: shelves plus fetch time; single entry, 30-min TTL. */
+    @Volatile
+    private var homeCache: Pair<Long, List<YouTubeHomeShelf>>? = null
 
     private val httpClient = HttpClient(OkHttp) {
         install(ContentNegotiation) {
@@ -257,21 +266,17 @@ class YouTubeMusicRepository {
     }
 
     /**
-     * Home-feed picks for the empty search screen.
-     *
-     * The guest feed exposes a "Quick picks" carousel; signed-in feeds add more
-     * shelves, so a matching shelf is preferred over whichever one happens to
-     * come first. Playlists and artist rows are skipped because only playable
-     * tracks can be represented by [Track] here.
-     */
-    suspend fun homeRecommendations(limit: Int = 12): List<Track> =
-        homeShelves().firstOrNull()?.tracks?.distinctBy { it.id }?.take(limit).orEmpty()
-
-    /**
      * Every home-feed shelf, in YouTube's order, capped at [maxShelves] x
      * [perShelf]. Mirrors ArchiveTune's HomeScreen carousel structure.
      */
     suspend fun homeShelves(maxShelves: Int = 6, perShelf: Int = 12): List<YouTubeHomeShelf> {
+        // The home feed is the first thing every cold launch asks for and
+        // rarely changes within a session; a short TTL saves the request
+        // without showing stale content.
+        val now = System.currentTimeMillis()
+        homeCache?.let { (fetchedAt, shelves) ->
+            if (now - fetchedAt < HOME_CACHE_TTL_MS) return shelves
+        }
         val response = innerTube
             .browse(
                 client = YouTubeClient.WEB_REMIX,
@@ -281,11 +286,13 @@ class YouTubeMusicRepository {
 
         val shelves = mutableListOf<HomeShelf>()
         collectHomeShelves(response, shelves)
-        return shelves
+        val result = shelves
             .filterNot { shelf -> HOME_AVOID_MARKERS.any { marker -> marker in shelf.title.lowercase() } }
             .take(maxShelves)
             .map { shelf -> YouTubeHomeShelf(title = shelf.title, tracks = shelf.tracks.take(perShelf)) }
             .filter { it.tracks.isNotEmpty() }
+        if (result.isNotEmpty()) homeCache = now to result
+        return result
     }
 
     /**
@@ -354,14 +361,23 @@ class YouTubeMusicRepository {
         }?.trim().orEmpty()
     }
 
-    private fun parseTrackRenderer(rendererJson: JsonObject): Track? {
+    internal fun parseTrackRenderer(rendererJson: JsonObject): Track? {
         // Try musicResponsiveListItemRenderer first (search results, browse rows).
         parseTrackRendererResponsive(rendererJson)?.let { return it }
         // Fallback: musicTwoRowItemRenderer (home feed carousel items).
         return parseTrackRendererTwoRow(rendererJson)
     }
 
-    private fun parseTrackRendererResponsive(rendererJson: JsonObject): Track? =
+    /** First subtitle entry that looks like a creator, not metadata. */
+    internal fun subtitleArtist(subtitleTexts: List<String>): String =
+        subtitleTexts.firstOrNull { text ->
+            !isSuggestionMetadata(text) &&
+                parseDurationMs(text) == null &&
+                !text.contains("views", ignoreCase = true) &&
+                !text.contains("plays", ignoreCase = true)
+        } ?: "Unknown artist"
+
+    internal fun parseTrackRendererResponsive(rendererJson: JsonObject): Track? =
         runCatching {
             val renderer = rendererJson["musicResponsiveListItemRenderer"] as? JsonObject
                 ?: return@runCatching null
@@ -375,24 +391,19 @@ class YouTubeMusicRepository {
             }
             val title = columns.getOrNull(0).orEmpty().joinToString(" ")
                 .takeIf { it.isNotBlank() } ?: ""
+            // Subtitle fields arrive as separate runs, but some feeds pack
+            // "Artist • Album • 3:45" into one; split on the separator.
             val subtitleTexts = columns.getOrNull(1).orEmpty()
-            val artist = subtitleTexts.firstOrNull { text ->
-                !isSuggestionMetadata(text) &&
-                    parseDurationMs(text) == null &&
-                    !text.contains("views", ignoreCase = true) &&
-                    !text.contains("plays", ignoreCase = true)
-            } ?: "Unknown artist"
+                .flatMap { it.split("•").map(String::trim) }
+                .filter { it.isNotBlank() }
+            val artist = subtitleArtist(subtitleTexts)
             val videoId = ((renderer["playlistItemData"] as? JsonObject)
                 ?.get("videoId")?.jsonPrimitive?.contentOrNull)
                 ?: ((renderer["navigationEndpoint"] as? JsonObject)
                     ?.get("watchEndpoint") as? JsonObject)
                     ?.get("videoId")?.jsonPrimitive?.contentOrNull
                 ?: ""
-            val artworkUrl = ((renderer["thumbnail"] as? JsonObject)
-                ?.get("musicThumbnailRenderer") as? JsonObject)
-                ?.get("thumbnail") as? JsonObject
-            val artwork = ((artworkUrl?.get("thumbnails") as? JsonArray)?.lastOrNull()
-                as? JsonObject)?.get("url")?.jsonPrimitive?.contentOrNull
+            val artwork = musicThumbnailUrl(renderer)
             val duration = subtitleTexts
                 .mapNotNull(::parseDurationMs)
                 .firstOrNull()
@@ -427,7 +438,7 @@ class YouTubeMusicRepository {
         }.getOrNull()
 
     /** Parses musicTwoRowItemRenderer — the compact card used in browse home shelves. */
-    private fun parseTrackRendererTwoRow(rendererJson: JsonObject): Track? =
+    internal fun parseTrackRendererTwoRow(rendererJson: JsonObject): Track? =
         runCatching {
             val twoRow = rendererJson["musicTwoRowItemRenderer"] as? JsonObject ?: return null
             val titleRuns = (twoRow["title"] as? JsonObject)?.get("runs") as? JsonArray
@@ -435,15 +446,15 @@ class YouTubeMusicRepository {
                 (it as? JsonObject)?.get("text")?.jsonPrimitive?.contentOrNull
             }.joinToString(" ").trim().takeIf { it.isNotBlank() } ?: ""
             val subtitleRuns = (twoRow["subtitle"] as? JsonObject)?.get("runs") as? JsonArray
-            val subtitleTexts = subtitleRuns.orEmpty().mapNotNull {
-                (it as? JsonObject)?.get("text")?.jsonPrimitive?.contentOrNull?.trim()
+            // YouTube packs the whole subtitle into one run joined by " • ";
+            // other feeds split it into one run per field. Handle both.
+            val subtitleTexts = subtitleRuns.orEmpty().flatMap { run ->
+                (run as? JsonObject)?.get("text")?.jsonPrimitive?.contentOrNull
+                    .orEmpty()
+                    .split("•")
+                    .map { it.trim() }
             }.filter { it.isNotBlank() }
-            val artist = subtitleTexts.firstOrNull { text ->
-                !isSuggestionMetadata(text) &&
-                    parseDurationMs(text) == null &&
-                    !text.contains("views", ignoreCase = true) &&
-                    !text.contains("plays", ignoreCase = true)
-            } ?: "Unknown artist"
+            val artist = subtitleArtist(subtitleTexts)
             val videoId = ((twoRow["navigationEndpoint"] as? JsonObject)
                 ?.get("watchEndpoint") as? JsonObject)
                 ?.get("videoId")
@@ -551,12 +562,7 @@ class YouTubeMusicRepository {
         val videoId = (watch["videoId"] as? JsonPrimitive)?.contentOrNull ?: return null
         val title = textRuns(card["title"]).takeIf { it.isNotBlank() } ?: return null
         val subtitleTexts = textRunsList(card["subtitle"])
-        val artist = subtitleTexts.firstOrNull { text ->
-            !isSuggestionMetadata(text) &&
-                parseDurationMs(text) == null &&
-                !text.contains("views", ignoreCase = true) &&
-                !text.contains("plays", ignoreCase = true)
-        } ?: "Unknown artist"
+        val artist = subtitleArtist(subtitleTexts)
         val duration = subtitleTexts.mapNotNull(::parseDurationMs).firstOrNull() ?: 0L
 
         return Track(
@@ -781,9 +787,15 @@ class YouTubeMusicRepository {
     suspend fun fetchLyrics(videoId: String): String? = withContext(Dispatchers.IO) {
         val url = "https://music.youtube.com/api/timedtext" +
             "?v=$videoId&lang=en&fmt=json3&client=WEB_REMIX&c=WEB_REMIX"
-        val body = runCatching {
-            httpClient.get(url) { header("User-Agent", WEB_USER_AGENT) }.bodyAsText()
-        }.getOrNull().orEmpty()
+        // One retry: a blipped request must not look identical to "no
+        // captions". Both failures are logged so the diagnostics screen can
+        // tell a network problem apart from a track without captions.
+        val body = fetchLyricsOnce(url)
+            ?: delay(500).let { fetchLyricsOnce(url) }
+            ?: run {
+                LogCatcher.w("YouTubeRepo", "timedtext request failed for $videoId")
+                return@withContext null
+            }
 
         val events = runCatching {
             json.parseToJsonElement(body).jsonObject["events"]?.jsonArray
@@ -799,19 +811,30 @@ class YouTubeMusicRepository {
         lines.takeIf { it.isNotEmpty() }?.joinToString("\n")
     }
 
+    /** One timedtext attempt; null on any network failure. Empty body is valid (no captions). */
+    private suspend fun fetchLyricsOnce(url: String): String? =
+        runCatching {
+            httpClient.get(url) { header("User-Agent", WEB_USER_AGENT) }.bodyAsText()
+        }.onFailure { LogCatcher.w("YouTubeRepo", "timedtext request error: ${it.message}") }
+            .getOrNull()
+
     fun close() {
         innerTube.close()
         httpClient.close()
     }
 
-    private fun isSuggestionMetadata(text: String): Boolean =
+    internal fun isSuggestionMetadata(text: String): Boolean =
         text.all { it == '•' || it.isWhitespace() } ||
             text.lowercase() in SEARCH_SUGGESTION_LABELS
 
-    private fun parseDurationMs(text: String): Long? {
+    internal fun parseDurationMs(text: String): Long? {
         val parts = text.trim().split(":")
         if (parts.size !in 2..3) return null
         val numbers = parts.map { it.toLongOrNull() ?: return null }
+        // Seconds (and minutes in an h:mm:ss stamp) are clock fields, not
+        // free counters: "3:75" is not a duration, it is noise like "5.2M views".
+        if (numbers.last() >= 60) return null
+        if (numbers.size == 3 && numbers[1] >= 60) return null
         return when (numbers.size) {
             2 -> (numbers[0] * 60 + numbers[1]) * 1000
             3 -> (numbers[0] * 3600 + numbers[1] * 60 + numbers[2]) * 1000

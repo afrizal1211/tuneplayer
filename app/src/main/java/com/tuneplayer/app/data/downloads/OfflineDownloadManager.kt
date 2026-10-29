@@ -9,6 +9,7 @@ import com.tuneplayer.app.data.youtube.YouTubeMusicRepository
 import com.tuneplayer.app.log.LogCatcher
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
+import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.request.header
 import io.ktor.client.request.prepareGet
 import io.ktor.client.statement.bodyAsChannel
@@ -60,7 +61,14 @@ class OfflineDownloadManager(
     private val appContext = context.applicationContext
     private val prefs = appContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val httpClient = HttpClient(OkHttp)
+    private val httpClient = HttpClient(OkHttp) {
+        // A stalled trickle must not pin a download slot forever: the socket
+        // timeout kills mid-stream stalls, the connect timeout dead hosts.
+        install(HttpTimeout) {
+            connectTimeoutMillis = 15_000
+            socketTimeoutMillis = 30_000
+        }
+    }
     private val jobs = mutableMapOf<String, Job>()
 
     private val downloadsDir: File
@@ -129,6 +137,7 @@ class OfflineDownloadManager(
 
     /** Original metadata with a local file URI, ready for the player. */
     fun downloadedTracks(): List<Track> = _state.value.downloads.values
+        .filter { fileFor(it).isFile }
         .sortedByDescending { it.downloadedAt }
         .map { entry ->
             entry.track.copy(mediaUri = Uri.fromFile(fileFor(entry)).toString())
@@ -193,6 +202,11 @@ class OfflineDownloadManager(
                             }
                         }
                     }
+                }
+                if (totalBytes > 0L && downloaded != totalBytes) {
+                    // Truncated response = corrupt file. Renaming would keep a
+                    // broken entry; fail instead so the part file is cleaned up.
+                    error("Incomplete download: $downloaded of $totalBytes bytes")
                 }
                 if (downloaded <= 0L) error("Downloaded file was empty")
             }

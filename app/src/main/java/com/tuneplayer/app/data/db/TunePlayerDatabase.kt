@@ -17,7 +17,7 @@ import androidx.room.TypeConverters
         FormatEntity::class,
         LyricsEntity::class,
     ],
-    version = 1,
+    version = 2,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -34,7 +34,25 @@ abstract class TunePlayerDatabase : androidx.room.RoomDatabase() {
                     context.applicationContext,
                     TunePlayerDatabase::class.java,
                     "tuneplayer.db",
-                ).build().also { instance = it }
+                )
+                    .addMigrations(MIGRATION_1_2)
+                    .build().also { instance = it }
             }
+
+        /**
+         * v2: index event.timestamp for the recents query and cap the log.
+         * Room auto-creates the new indices during migration; the prune
+         * keeps old installs from carrying an ever-growing event table.
+         */
+        private val MIGRATION_1_2 = object : androidx.room.migration.Migration(1, 2) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_event_timestamp ON event(timestamp)")
+                // Keep the newest 5,000 events; the stats screens read at most 100.
+                db.execSQL(
+                    "DELETE FROM event WHERE id NOT IN " +
+                        "(SELECT id FROM event ORDER BY timestamp DESC LIMIT 5000)",
+                )
+            }
+        }
     }
 }

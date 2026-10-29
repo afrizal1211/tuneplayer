@@ -23,7 +23,6 @@ import com.tuneplayer.app.ui.TunePlayerViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import com.tuneplayer.app.ui.TunePlayerViewModel.Companion.MAX_RESOLVED_CACHE
 import com.tuneplayer.app.ui.TunePlayerViewModel.Companion.TAG
 
 internal fun TunePlayerViewModel.startPositionPolling() {
@@ -32,40 +31,61 @@ internal fun TunePlayerViewModel.startPositionPolling() {
         while (true) {
             val player = controller
             if (player != null) {
-                uiState = uiState.copy(
-                    positionMs = player.currentPosition.coerceAtLeast(0L),
-                    durationMs = player.duration
-                        .takeIf { it > 0 && it != androidx.media3.common.C.TIME_UNSET }
-                        ?: uiState.currentTrack?.durationMs
-                        ?: 0L,
-                )
-            }
-            // Roughly every 5s: prefs writes are cheap but not free.
-            pollTicks++
-            if (pollTicks % 20 == 0 && uiState.currentTrack != null) {
-                queueStore.positionMs = uiState.positionMs
-                queueStore.index = uiState.queueIndex
-            }
-            val lines = uiState.syncedLyrics
-            if (lines.isNotEmpty()) {
-                val position = (uiState.positionMs - uiState.lyricsOffsetMs).coerceAtLeast(0L)
-                val idx = activeLineIndex(lines, position)
-                val word = if (idx == uiState.activeLyricIndex) {
-                    uiState.activeWordIndex
-                } else if (idx in lines.indices) {
-                    activeWordIndex(lines[idx], position)
-                } else {
-                    -1
-                }
-                val rows = activeLyricRows(lines, position)
-                if (idx != uiState.activeLyricIndex || rows != uiState.activeLyricRows) {
+                val playing = player.isPlaying
+                // Copying the whole state while paused recomposes every
+                // reader of uiState for nothing; only the lyrics block needs
+                // ticks while paused, and it reads positionMs, not the player.
+                if (playing) {
                     uiState = uiState.copy(
-                        activeLyricIndex = idx,
-                        activeWordIndex = word,
-                        activeLyricRows = rows,
+                        positionMs = player.currentPosition.coerceAtLeast(0L),
+                        durationMs = player.duration
+                            .takeIf { it > 0 && it != androidx.media3.common.C.TIME_UNSET }
+                            ?: uiState.currentTrack?.durationMs
+                            ?: 0L,
                     )
-                } else if (word != uiState.activeWordIndex) {
-                    uiState = uiState.copy(activeWordIndex = word)
+                }
+                // Roughly every 5s: prefs writes are cheap but not free.
+                pollTicks++
+                if (pollTicks % 20 == 0 && uiState.currentTrack != null) {
+                    queueStore.positionMs = uiState.positionMs
+                    queueStore.index = uiState.queueIndex
+                }
+                // Play-time accounting: accumulate real playback time per
+                // track and flush it periodically. Only counted while
+                // actually playing, so paused hours do not inflate stats.
+                val track = uiState.currentTrack
+                if (playing && track != null) {
+                    playedTimeAccumulatorMs += TunePlayerViewModel.POLL_INTERVAL_MS
+                    if (playedTimeAccumulatorMs >= TunePlayerViewModel.PLAY_TIME_FLUSH_MS) {
+                        val delta = playedTimeAccumulatorMs
+                        playedTimeAccumulatorMs = 0L
+                        viewModelScope.launch {
+                            runCatching { app.database.dao().addPlayTime(track.id, delta) }
+                                .onFailure { LogCatcher.w(TAG, "addPlayTime failed", it) }
+                        }
+                    }
+                }
+                val lines = uiState.syncedLyrics
+                if (lines.isNotEmpty()) {
+                    val position = (uiState.positionMs - uiState.lyricsOffsetMs).coerceAtLeast(0L)
+                    val idx = activeLineIndex(lines, position)
+                    val word = if (idx == uiState.activeLyricIndex) {
+                        uiState.activeWordIndex
+                    } else if (idx in lines.indices) {
+                        activeWordIndex(lines[idx], position)
+                    } else {
+                        -1
+                    }
+                    val rows = activeLyricRows(lines, position)
+                    if (idx != uiState.activeLyricIndex || rows != uiState.activeLyricRows) {
+                        uiState = uiState.copy(
+                            activeLyricIndex = idx,
+                            activeWordIndex = word,
+                            activeLyricRows = rows,
+                        )
+                    } else if (word != uiState.activeWordIndex) {
+                        uiState = uiState.copy(activeWordIndex = word)
+                    }
                 }
             }
             delay(250)
@@ -390,10 +410,9 @@ internal fun TunePlayerViewModel.buildMediaItem(
 
 /** Stream URIs are short-lived; cap the cache and let it expire with the process. */
 internal fun TunePlayerViewModel.cacheResolvedUri(trackId: String, uri: String) {
+    // LinkedHashMap is access-ordered; insertion/read order eviction is the
+    // map's job now (removeEldestEntry), so this is just a put.
     resolvedUris[trackId] = uri
-    if (resolvedUris.size > MAX_RESOLVED_CACHE) {
-        resolvedUris.keys.firstOrNull()?.let(resolvedUris::remove)
-    }
 }
 
 internal fun TunePlayerViewModel.recordHistory(track: Track) {
